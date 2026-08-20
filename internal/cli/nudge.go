@@ -52,7 +52,7 @@ func nudgeExec(c *Context) error {
 		if !shouldNudge(pr, threshold) {
 			continue
 		}
-		if state[pr.URL] == today {
+		if state[pr.URL].Date == today {
 			continue // already nudged today: idempotent
 		}
 		for _, reviewer := range pr.Reviewers() {
@@ -60,7 +60,7 @@ func nudgeExec(c *Context) error {
 				return err
 			}
 		}
-		state[pr.URL] = today
+		state[pr.URL] = nudgeRecord{Date: today, Count: state[pr.URL].Count + 1}
 		nudged++
 	}
 	// Dry-run previews; it must not burn today's nudge budget.
@@ -96,12 +96,19 @@ func shouldNudge(pr gh.PR, threshold time.Duration) bool {
 	return time.Since(pr.UpdatedAt) >= threshold
 }
 
+// nudgeRecord tracks per-PR nudge bookkeeping: last nudge day (for
+// same-day idempotency) and lifetime count (shown by standup).
+type nudgeRecord struct {
+	Date  string `json:"date"`
+	Count int    `json:"count"`
+}
+
 func nudgeStatePath() string {
 	return filepath.Join(filepath.Dir(config.Path()), "nudge-state.json")
 }
 
-func loadNudgeState() (map[string]string, error) {
-	state := map[string]string{}
+func loadNudgeState() (map[string]nudgeRecord, error) {
+	state := map[string]nudgeRecord{}
 	data, err := os.ReadFile(nudgeStatePath())
 	if os.IsNotExist(err) {
 		return state, nil
@@ -115,7 +122,7 @@ func loadNudgeState() (map[string]string, error) {
 	return state, nil
 }
 
-func saveNudgeState(state map[string]string) error {
+func saveNudgeState(state map[string]nudgeRecord) error {
 	data, err := json.MarshalIndent(state, "", "  ")
 	if err != nil {
 		return err

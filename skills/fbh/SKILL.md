@@ -20,7 +20,7 @@ GitHub 是镜像；所有外部副作用（表格/企微/GitHub）经 `fbh` CLI 
 | /fbh-pr | 建 PR + 回写表格 + 企微@reviewer | ✅ 已落地 |
 | /fbh-nudge | 幂等催办 | ✅ 已落地 |
 | /fbh-review-pr | reviewer 侧 AI review 循环 | ✅ 已落地 |
-| /standup | 防漏看板 | 票 07 |
+| /fbh-standup | 防漏看板 | ✅ 已落地 |
 | /gate | milestone 门禁 | 票 08 |
 
 尚未落地的命令请勿臆造行为；告知用户对应施工票编号。
