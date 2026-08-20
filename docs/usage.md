@@ -1,165 +1,159 @@
 # fbh 团队使用文档
 
-fbh 是团队工作流 harness：需求拆分 → 认领 → 开发 → PR → AI review 循环 →
-人工 review → milestone 门禁 → 勾选完成，全流程跑在每个开发本机的
-Claude Code skills + `fbh` CLI 上，无中心服务。腾讯智能表格是需求状态的
-唯一真相源，GitHub 是镜像。
+fbh 是团队工作流 harness：一套装在每个开发本机的 Claude Code skills +
+`fbh` CLI，无中心服务。按需渐进接入，三档任选，随时升档、命令不变：
 
-## 零、最小接入：只治 PR review（推荐起步，5 分钟/人）
+| 档位 | 解决什么 | 需要配什么 |
+|---|---|---|
+| ① 最小 | 催 review 靠吼、循环没终点、人工 review 走过场 | 企微 webhook + 身份映射 |
+| ② PR 台账（**当前团队目标档**） | ① + 全队 PR 进腾讯表格，谁欠 review 一目了然 | ① + 腾讯授权 + 台账工作表 |
+| ③ 完整 | ② + 需求拆分/认领/milestone 门禁 | ② + 需求表 + milestone 表 |
 
-不动需求表、不碰 milestone、不需要腾讯文档授权——只解决"催 review 靠吼、
-循环没终点、人工 review 走过场"：
+## 一、安装（每人一次，所有档位相同）
 
 ```bash
 git clone https://github.com/kyonRay/fisco-bcos-harness.git && cd fisco-bcos-harness
-./install.sh
+./install.sh     # 软链全部 skills 到 ~/.claude/skills/，构建 bin/fbh
+```
+
+把 `bin/fbh` 加进 PATH（如 `ln -s $PWD/bin/fbh /usr/local/bin/fbh`）。
+升级：`git pull && ./install.sh`。之后在 Claude Code 里跑 `/fbh-setup`，
+它会先问你接入哪一档再逐项引导。
+
+## 二、按档配置
+
+**① 最小档（5 分钟）：**
+
+```bash
 fbh config set wecom_webhook '<企微群机器人 webhook URL>'
 fbh config set mention_map '{"<github登录名>":"<企微userid>", ...}'
 ```
 
-日常只用四个动作：
+mention_map 必配：GitHub 用户名和企微 userid 几乎必然不同名，不配则@落空。
+验证：跑一条 `fbh wecom nudge --to <自己> --pr test --dry-run` 看动作。
 
-| 场景 | 命令/skill |
-|---|---|
-| 提 PR | `/fbh-pr`（不带表格参数 → 建 PR + 企微定向@ 两连） |
-| 没人理 | `/fbh-nudge`（超 24h 才催、同日幂等、不骚扰在等作者的） |
-| 被指派 review | `/fbh-review-pr`（must-fix 分级 → request-changes 循环 → 预读简报 → 人亲手 approve） |
-| 早上开工 | `/fbh-standup`（我欠谁的 / 谁欠我的，四态一目了然） |
+**② PR 台账档（在①之上）：**
 
-## 零点五、PR 台账模式（推荐的第二步：review 进腾讯表格）
+1. 腾讯文档授权（/fbh-setup 引导，浏览器扫码一次；token 由 mcporter 保管，
+   fbh 复用，表格操作带你本人署名）。
+2. 智能表格里建"PR台账"工作表，7 个文本列：
+   `PR链接 | 标题 | 作者 | reviewers | 已approve | 状态 | 更新时间`。
+3. ```bash
+   fbh config set sheet_file_id '<表格URL里 smartsheet/ 后面那段>'
+   fbh config set pr_sheet_id  '<台账工作表 sheet_id>'   # fbh sheet ping 可查
+   ```
 
-在最小接入之上，让 PR 进智能表格——**不管需求、不管 milestone**，表格里
-记的就是 PR 本身。建一个"PR 台账"工作表（7 个文本列：
-PR链接 / 标题 / 作者 / reviewers / 已approve / 状态 / 更新时间），然后：
+验证：`fbh sheet ping` 列出工作表名即链路通。
 
-```bash
-# 在最小接入的基础上补两项（需要腾讯文档授权，见 /fbh-setup）
-fbh config set sheet_file_id '<智能表格 file_id>'
-fbh config set pr_sheet_id  '<PR台账工作表的 sheet_id>'   # fbh sheet ping 可查
-```
+**③ 完整档（在②之上）：** 再建需求表（7 列：需求名/所属总需求/milestone/
+认领人/状态/PR链接/备注）和 milestone 表（4 列：名称/负责人/门禁状态/
+门禁时间）；milestone 负责人另配 `gate_cmd`。
 
-配好后工作流自动升级：
+## 三、日常流程（以台账档为主线）
 
-- **提 PR**：`/fbh-pr` 建 PR 时自动在台账**注册一行**（状态=待review、
-  记下 reviewers），并推群定向@。
-- **谁想知道还有哪些 PR 待 review**：问自己的 AI，AI 跑 `fbh pr board`
-  读台账，列出所有未完结 PR（状态/reviewers/谁已 approve）。
-- **按意见修复推送后**：跑 `fbh pr sync --pr <PR链接> --notify` ——
-  从 GitHub 拉真实状态写回台账（谁 approve 了记入"已approve"列），
-  并企微**只@还没 approve 的同事**："已按 review 意见修复并推送，请继续 review"。
-- 台账状态机（由 GitHub 状态自动推导，不用手填）：
-  待review → 修复中（被 request-changes）→ 待复审（修复已推送）→
-  已approve → 已合入。
+### 提 PR（作者）
 
-需求/milestone 那半（/fbh-split、/fbh-claim、/fbh-gate、需求状态回写）
-想接的时候再走下面的完整配置，`pr open` 加 `--table/--key` 即挂上需求行。
+`/fbh-pr` —— 一条命令：建 GitHub PR 指派 reviewer（可多人，逗号分隔）→
+**自动在台账注册一行**（状态=待review，记下 reviewers）→ 企微定向@全部
+reviewer。最小档没有台账步骤；完整档加 `--table/--key` 可同时挂需求行。
 
-## 一、完整安装（每人一次，约 10 分钟）
+### 按 review 意见修复后（作者）
+
+改完 push，然后：
 
 ```bash
-git clone <内部仓库地址> && cd fisco-bcos-harness
-./install.sh          # 软链全部 skills（共 9 个）到 ~/.claude/skills/，构建 bin/fbh
+fbh pr sync --pr <PR链接> --notify
 ```
 
-把 `bin/fbh` 加进 PATH（或 `ln -s $PWD/bin/fbh /usr/local/bin/fbh`）。
-升级：`git pull && ./install.sh`（skills 即时生效，fbh 重新构建）。
+状态从 GitHub 自动推导写回台账（谁 approve 了记入"已approve"列），
+企微**只@还没 approve 的同事**："已按 review 意见修复并推送，请继续 review"。
+最小档没有台账时用 `/fbh-nudge --threshold 1` 催复审。
 
-然后在 Claude Code 里跑 `/fbh-setup`，按引导完成三项配置：
+### 看全队欠账（任何人，问自己的 AI 即可）
 
-1. **腾讯文档授权**——走 tencent-docs 的浏览器授权流程，token 由 mcporter
-   保管，fbh 直接复用，以你本人身份操作表格（修改记录带真实署名）。
-2. **企微 webhook key**——团队共享值，找负责人要。
-3. **表格 file_id**——团队智能表格 URL 里 `smartsheet/` 后面那段。
-4. （可选但强烈建议）**企微身份映射**——GitHub 用户名和企微 userid 不同名时
-   @会落空：`fbh config set mention_map '{"github登录名":"企微userid", ...}'`。
+- `fbh pr board` —— 台账里所有未完结 PR：链接/状态/reviewers/谁已 approve。
+- `/fbh-standup` —— 个人视角两节：我的 PR 等谁（挂了多久/催过几次）+
+  我欠谁的（等我首审/等作者改/等我复审/等人工approve）。
 
-验证：`fbh sheet ping` 列出工作表名即为链路通。
+### 被指派 review（reviewer）
 
-## 二、日常流程（按角色）
+`/fbh-review-pr` —— AI 完整 review，意见按 must-fix/should/nit 分级发 PR
+comment：有 must-fix → request-changes 进循环；无 must-fix → 发**预读简报**
+（叙事 + 风险热图 + AI 自报盲区），人照简报精读 load-bearing 行后
+**亲手 approve**（AI 永不代按）。
 
-### 需求负责人：拆需求
+### 没人理（作者）
 
-`/fbh-split` —— 把总需求拆成子需求行写进需求表（状态=待认领），
-新 milestone 顺带写 milestone 表。
+`/fbh-nudge` —— 超 24h 无响应才催、同日幂等、"等作者改"的不骚扰 reviewer。
 
-### 开发：认领 → 开发 → 提 PR
+### 合入后（作者）
 
-1. `/fbh-claim` —— 认领一条子需求（已被人认领会拒绝并告知认领人）。
-2. 正常开发、push 分支。
-3. `/fbh-pr` —— 一条命令：建 PR 指派 reviewer → 表格回写 PR链接+待review →
-   企微定向@ reviewer。
-4. 没人理？`/fbh-nudge` —— 只催超过阈值（默认 24h）无响应的，同一 PR
-   同一天最多催一次；改完代码想催复审用 `--threshold 1`。
+`fbh pr sync --pr <PR链接>` 把台账行刷成"已合入"。
 
-### reviewer：AI review 循环 → 人工把关
+### 完整档补充
 
-1. 企微收到@后，`/fbh-review-pr` —— AI 完整 review，意见按
-   must-fix/should/nit 分级发 PR comment：
-   - 有 must-fix → request-changes，等作者改（作者会再催）。
-   - 无 must-fix → 发**预读简报**（叙事 + 风险热图 + AI 自报盲区）。
-2. 人工阶段：照简报只精读 load-bearing 行和 AI 盲区，**亲手 approve**
-   （AI 永不代按）。
-3. 合入后作者把表格状态推到"已合入"。
+需求负责人 `/fbh-split` 拆需求、开发 `/fbh-claim` 认领、milestone 负责人
+`/fbh-gate` 跑门禁（通过批量勾选完成，失败自动建缺陷行并@归因作者）。
+详见各 skill。
 
-### 每个人：早上开工
-
-`/fbh-standup` —— 两节看板：我的 PR 等谁 review（挂了多久/催过几次）+
-我欠谁的 review（等我首审/等作者改/等我复审/等人工approve）。
-两节皆空 = 无欠账。
-
-### milestone 负责人：门禁
-
-一次性配置 `fbh config set gate_cmd '<release-gate 调用命令>'`，然后
-`/fbh-gate` —— 跑完整集成测试+SIT：
-- 通过 → milestone 行记"通过"+时间，该 milestone 全部子需求置"完成"。
-- 失败 → 自动建缺陷行（含失败输出尾部）+ 企微@归因作者（AI 从失败输出
-  和 PR 记录里归因；归因不出@负责人本人）。
-
-## 三、命令参考
+## 四、命令参考
 
 | 命令 | 作用 |
 |---|---|
 | `fbh config set/show` | 本机配置（show 对 webhook 打码） |
 | `fbh sheet ping` | 连通性验证，列工作表 |
-| `fbh sheet upsert-row / set-status / claim` | 表格行操作（状态枚举强校验） |
 | `fbh pr open` | 建 PR → [台账注册] → [需求行回写] → 企微@ |
 | `fbh pr sync --pr <url> [--notify]` | 从 GitHub 刷台账状态，@未 approve 的人 |
-| `fbh pr board` | 读台账列出所有未完结 PR |
+| `fbh pr board` | 台账中所有未完结 PR |
 | `fbh nudge run [--threshold N]` | 幂等催办 |
 | `fbh gh review-state / my-prs / my-reviews` | PR review 状态与欠账查询 |
-| `fbh standup` | 防漏看板 |
-| `fbh gate run` | milestone 门禁 |
+| `fbh standup` | 个人防漏看板 |
+| `fbh sheet upsert-row / set-status / claim` | 需求表行操作（完整档） |
+| `fbh gate run` | milestone 门禁（完整档） |
 
-**任何子命令加 `--dry-run`**：外部动作只打印 JSON 行不执行。skills 在真写
-之前都会先 dry-run 给你确认。注意 `fbh gate run --dry-run` 中**门禁命令本身
-仍会真跑**（可能数小时），dry 的只是表格/企微回写。
+**任何子命令加 `--dry-run`**：外部动作只打印 JSON 行不执行。skills 真写前
+都会先 dry-run 给你确认。例外：`fbh gate run --dry-run` 的门禁命令本身
+仍会真跑（可能数小时），dry 的只是表格/企微回写。
 
-## 四、状态机（需求表"状态"列，CLI 强校验）
+## 五、状态机
+
+**PR 台账（台账档，由 GitHub 状态自动推导，永远不用手填）：**
+
+```
+待review → 修复中 → 待复审 → 已approve → 已合入
+ (pr open)  (被request- (修复已   (全员      (合入,
+             changes)    推送)    approve)   pr sync 刷入)
+```
+
+**需求表（完整档，CLI 强校验）：**
 
 ```
 待认领 → 开发中 → 待review → review循环 → 人工review → 已合入 → 完成
-  (split)  (claim)   (pr open)  (review-pr    (简报发出)   (合入后    (gate
-                                 有must-fix)                手动置)    通过)
+ (split)  (claim)  (pr open)  (有must-fix)  (简报发出)  (手动置)  (gate过)
 ```
 
-## 五、故障排查
+## 六、故障排查
 
 | 症状 | 处理 |
 |---|---|
-| `not configured; run /fbh-setup` | 跑 `/fbh-setup` 补缺项 |
-| `no tencent-docs token` | tencent-docs 授权流程没走完，见 /fbh-setup 第二步 |
+| `not configured; run /fbh-setup` | 跑 `/fbh-setup` 补缺项（报错会说缺哪个 key） |
+| `no tencent-docs token` | 腾讯授权没走完，/fbh-setup 引导重走 |
 | MCP HTTP 401/403 | token 过期，重新授权 |
-| `already claimed by X` | 需求已被 X 认领，找 X 协调，别硬抢 |
-| pr open 中途失败 | 按报错单独补跑 sheet/wecom 一步，别重跑造重复 PR |
-| 催办没发出 | 看是否同日已催过（幂等）；`fbh gh my-prs` 核对 PR 状态 |
-| 绕过 fbh 手工改了 GitHub | 表格镜像会滞后，下次相关 skill 动作时补写回 |
+| 企微@没落到人 | mention_map 没配或漏了这个人的映射 |
+| `pr sync` 报 gh 错误 | PR 链接写错或 `gh auth status` 失效 |
+| 台账出现重复行 | 两人同时首次 sync 同一 PR 的竞态，删掉一行即可（后续 sync 幂等） |
+| `already claimed by X` | 需求已被 X 认领（完整档），找 X 协调 |
+| pr open 中途失败 | 按报错单独补跑 sync/nudge 一步，别重跑造重复 PR |
+| 催办没发出 | 同日已催过（幂等）；`fbh gh my-prs` 核对状态 |
 
-## 六、设计边界（为什么是这样）
+## 七、设计边界（为什么是这样）
 
 - 无中心服务：催办动力在作者侧——谁的 PR 谁着急（ADR-0001）。
-- 表格为主 GitHub 为镜像，改状态的人顺带写回，无轮询（ADR-0002）。
-- review 循环终止只认 reviewer 侧的 GitHub review 状态（ADR-0003）。
+- **真相源分层**：review 状态的真相源永远是 GitHub 原生 review 状态
+  （ADR-0003），台账是全队可见的镜像，`pr sync` 单向刷入；需求/milestone
+  状态的真相源才是表格（ADR-0002，完整档）。所以台账状态不用手改，
+  改了也会被下次 sync 覆盖。
 - 凭证永不入库；腾讯身份是个人的，企微 key 是共享的（ADR-0006）。
-- 全部外部副作用走 fbh 单一接缝，dry-run/fake-endpoint 可测（spec）。
-  已知豁免：review 结论提交（`gh pr review`）由 /fbh-review-pr 直调 gh——
-  它天然要人参与、且 GitHub 原生状态即真相源，不经 fbh 包装。
+- 全部外部副作用走 fbh 单一接缝，dry-run/fake-endpoint 可测。已知豁免：
+  review 结论提交（`gh pr review`）由 /fbh-review-pr 直调 gh——它天然要
+  人参与、且 GitHub 原生状态即真相源，不经 fbh 包装。
