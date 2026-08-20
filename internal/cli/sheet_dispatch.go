@@ -3,10 +3,13 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
+	"strings"
 
 	"github.com/kyonRay/fisco-bcos-harness/internal/action"
 	"github.com/kyonRay/fisco-bcos-harness/internal/config"
 	"github.com/kyonRay/fisco-bcos-harness/internal/mcp"
+	"github.com/kyonRay/fisco-bcos-harness/internal/schema"
 )
 
 // sheetClient builds an MCP client from local config + the mcporter
@@ -37,19 +40,183 @@ var sheetToolName = map[string]string{
 }
 
 func sheetDispatch(c *Context, a action.Action) error {
-	tool, ok := sheetToolName[a.Op]
-	if !ok {
-		return fmt.Errorf("no smartsheet tool for op %q", a.Op)
-	}
 	client, err := sheetClient()
 	if err != nil {
 		return err
+	}
+	switch a.Op {
+	case "upsert_row":
+		return dispatchUpsertRow(c, client, a)
+	case "claim":
+		return dispatchClaim(c, client, a)
+	}
+	tool, ok := sheetToolName[a.Op]
+	if !ok {
+		return fmt.Errorf("no smartsheet tool for op %q", a.Op)
 	}
 	text, err := client.CallTool(tool, a.Payload)
 	if err != nil {
 		return err
 	}
 	return renderSheetResult(c, a.Op, text)
+}
+
+// sheetRecord is one row as returned by smartsheet.list_records.
+type sheetRecord struct {
+	RecordID    string `json:"record_id"`
+	FieldValues []struct {
+		Field     string `json:"field"`
+		TextValue struct {
+			Items []struct {
+				Text string `json:"text"`
+			} `json:"items"`
+		} `json:"text_value"`
+	} `json:"field_values"`
+}
+
+func (r sheetRecord) text(field string) string {
+	for _, fv := range r.FieldValues {
+		if fv.Field != field {
+			continue
+		}
+		var parts []string
+		for _, item := range fv.TextValue.Items {
+			parts = append(parts, item.Text)
+		}
+		return strings.Join(parts, "")
+	}
+	return ""
+}
+
+// findRecord looks up the row whose keyField text equals key.
+func findRecord(client *mcp.Client, fileID, sheetID, keyField, key string) (*sheetRecord, error) {
+	text, err := client.CallTool("smartsheet.list_records", map[string]any{
+		"file_id":  fileID,
+		"sheet_id": sheetID,
+	})
+	if err != nil {
+		return nil, err
+	}
+	var parsed struct {
+		Records []sheetRecord `json:"records"`
+	}
+	if err := json.Unmarshal([]byte(text), &parsed); err != nil {
+		return nil, fmt.Errorf("parse list_records result: %w", err)
+	}
+	for i := range parsed.Records {
+		if parsed.Records[i].text(keyField) == key {
+			return &parsed.Records[i], nil
+		}
+	}
+	return nil, nil
+}
+
+// textEntries converts 列名→值 sets into smartsheet FieldValueEntry
+// objects (all text-typed; the team sheet uses text columns).
+func textEntries(sets map[string]any) []map[string]any {
+	titles := make([]string, 0, len(sets))
+	for k := range sets {
+		titles = append(titles, k)
+	}
+	sort.Strings(titles)
+	entries := make([]map[string]any, 0, len(sets))
+	for _, k := range titles {
+		entries = append(entries, map[string]any{
+			"field": k,
+			"text_value": map[string]any{
+				"items": []map[string]any{{"type": "text", "text": fmt.Sprintf("%v", sets[k])}},
+			},
+		})
+	}
+	return entries
+}
+
+func payloadStr(p map[string]any, key string) string {
+	v, _ := p[key].(string)
+	return v
+}
+
+func payloadSets(p map[string]any) map[string]any {
+	if m, ok := p["sets"].(map[string]any); ok {
+		return m
+	}
+	return map[string]any{}
+}
+
+func dispatchUpsertRow(c *Context, client *mcp.Client, a action.Action) error {
+	fileID := payloadStr(a.Payload, "file_id")
+	sheetID := payloadStr(a.Payload, "sheet_id")
+	keyField := payloadStr(a.Payload, "key_field")
+	key := payloadStr(a.Payload, "key")
+	sets := payloadSets(a.Payload)
+
+	rec, err := findRecord(client, fileID, sheetID, keyField, key)
+	if err != nil {
+		return err
+	}
+	if rec == nil {
+		full := map[string]any{keyField: key}
+		for k, v := range sets {
+			full[k] = v
+		}
+		_, err := client.CallTool("smartsheet.add_records", map[string]any{
+			"file_id":  fileID,
+			"sheet_id": sheetID,
+			"records":  []map[string]any{{"field_values": textEntries(full)}},
+		})
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(c.Stdout, "added row %q\n", key)
+		return nil
+	}
+	_, err = client.CallTool("smartsheet.update_records", map[string]any{
+		"file_id":  fileID,
+		"sheet_id": sheetID,
+		"records": []map[string]any{{
+			"record_id":    rec.RecordID,
+			"field_values": textEntries(sets),
+		}},
+	})
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(c.Stdout, "updated row %q\n", key)
+	return nil
+}
+
+func dispatchClaim(c *Context, client *mcp.Client, a action.Action) error {
+	fileID := payloadStr(a.Payload, "file_id")
+	sheetID := payloadStr(a.Payload, "sheet_id")
+	key := payloadStr(a.Payload, "key")
+	owner := payloadStr(a.Payload, "owner")
+
+	rec, err := findRecord(client, fileID, sheetID, schema.ColRequirement, key)
+	if err != nil {
+		return err
+	}
+	if rec == nil {
+		return fmt.Errorf("requirement %q not found in sheet %s", key, sheetID)
+	}
+	if current := rec.text(schema.ColOwner); current != "" && current != owner {
+		return fmt.Errorf("requirement %q is already claimed by %s", key, current)
+	}
+	_, err = client.CallTool("smartsheet.update_records", map[string]any{
+		"file_id":  fileID,
+		"sheet_id": sheetID,
+		"records": []map[string]any{{
+			"record_id": rec.RecordID,
+			"field_values": textEntries(map[string]any{
+				schema.ColOwner:  owner,
+				schema.ColStatus: "开发中",
+			}),
+		}},
+	})
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(c.Stdout, "claimed %q as %s\n", key, owner)
+	return nil
 }
 
 // renderSheetResult prints a human summary where the shape is known,

@@ -15,8 +15,8 @@ GitHub 是镜像；所有外部副作用（表格/企微/GitHub）经 `fbh` CLI 
 | skill | 作用 | 状态 |
 |---|---|---|
 | /fbh-setup | 凭证与表格配置引导 | ✅ 已落地 |
-| /split | 总需求拆子需求行 | 票 03 |
-| /claim | 认领子需求 | 票 03 |
+| /fbh-split | 总需求拆子需求行 | ✅ 已落地 |
+| /fbh-claim | 认领子需求 | ✅ 已落地 |
 | /pr | 建 PR + 回写表格 + 企微@reviewer | 票 04 |
 | /nudge | 幂等催办 | 票 05 |
 | /review-pr | reviewer 侧 AI review 循环 | 票 06 |
