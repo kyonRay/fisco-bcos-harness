@@ -22,6 +22,10 @@ bin/fbh --version
 bin/fbh <command> --dry-run
 ```
 
+## 使用文档
+
+团队使用文档（安装/角色流程/命令参考/状态机/排查）见 [docs/usage.md](docs/usage.md)。
+
 ## 测试
 
 ```bash
