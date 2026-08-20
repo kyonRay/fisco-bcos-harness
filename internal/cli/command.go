@@ -25,6 +25,11 @@ type Context struct {
 	Stderr io.Writer
 	Args   []string // arguments after the subcommand name, flags stripped
 
+	// LastResult carries one dispatcher's primary output (e.g. the URL
+	// of a created PR) to the actions emitted after it in the same
+	// Exec. Dry-run fills a placeholder so chains still sequence.
+	LastResult string
+
 	dryRun   bool
 	dispatch func(*Context, action.Action) error
 }
@@ -38,6 +43,9 @@ func (c *Context) Do(a action.Action) error {
 			return fmt.Errorf("encode action: %w", err)
 		}
 		fmt.Fprintln(c.Stdout, string(line))
+		if c.LastResult == "" {
+			c.LastResult = "<dry-run>"
+		}
 		return nil
 	}
 	if c.dispatch == nil {
