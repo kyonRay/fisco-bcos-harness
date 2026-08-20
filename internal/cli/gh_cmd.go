@@ -3,6 +3,7 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/kyonRay/fisco-bcos-harness/internal/gh"
 )
@@ -24,9 +25,33 @@ func ghExec(c *Context) error {
 	switch sub {
 	case "review-state":
 		return ghReviewState(c, args)
+	case "my-prs":
+		return ghMyPRs(c)
 	default:
-		return fmt.Errorf("unknown gh subcommand %q (available: review-state)", sub)
+		return fmt.Errorf("unknown gh subcommand %q (available: review-state, my-prs)", sub)
 	}
+}
+
+// ghMyPRs lists the caller's open PRs with their review decision and
+// last review activity — the raw material for nudging and standup.
+func ghMyPRs(c *Context) error {
+	prs, err := gh.MyPRs()
+	if err != nil {
+		return err
+	}
+	if len(prs) == 0 {
+		fmt.Fprintln(c.Stdout, "no open PRs")
+		return nil
+	}
+	for _, pr := range prs {
+		last := "never"
+		if t := pr.LastReviewAt(); !t.IsZero() {
+			last = t.Format("2006-01-02 15:04")
+		}
+		fmt.Fprintf(c.Stdout, "%s\t%s\tlast-review: %s\treviewers: %s\n",
+			pr.URL, pr.NormalizedDecision(), last, strings.Join(pr.Reviewers(), ","))
+	}
+	return nil
 }
 
 // ghReviewState prints the ADR-0003 verdict carrier: the PR's native
