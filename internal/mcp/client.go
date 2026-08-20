@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // DefaultBaseURL is the production Tencent Docs MCP endpoint.
@@ -23,7 +24,8 @@ type Client struct {
 	Token   string
 	HTTP    *http.Client
 
-	sessionID string
+	sessionID   string
+	initialized bool
 }
 
 // LoadToken reads the Tencent Docs Authorization token that the
@@ -95,7 +97,8 @@ func (c *Client) post(req rpcRequest) (*http.Response, error) {
 	}
 	client := c.HTTP
 	if client == nil {
-		client = http.DefaultClient
+		client = &http.Client{Timeout: 60 * time.Second}
+		c.HTTP = client
 	}
 	return client.Do(httpReq)
 }
@@ -125,13 +128,14 @@ func (c *Client) handshake() error {
 		return fmt.Errorf("mcp initialized notification: %w", err)
 	}
 	notif.Body.Close()
+	c.initialized = true
 	return nil
 }
 
 // CallTool performs the MCP handshake (once) and invokes one tool,
 // returning the concatenated text content of the result.
 func (c *Client) CallTool(name string, args map[string]any) (string, error) {
-	if c.sessionID == "" {
+	if !c.initialized {
 		if err := c.handshake(); err != nil {
 			return "", err
 		}

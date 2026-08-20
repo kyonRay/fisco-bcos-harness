@@ -16,7 +16,7 @@ func init() {
 		Name:     "gate",
 		Summary:  "run the milestone gate (wraps the release-gate command), write results back",
 		Exec:     gateExec,
-		Dispatch: gateDispatch,
+		Dispatch: routeAction,
 	})
 }
 
@@ -103,22 +103,11 @@ func gateExec(c *Context) error {
 	return fmt.Errorf("gate failed for milestone %s (defect row %s filed)", milestone, defectKey)
 }
 
-// gateDispatch routes gate's actions to their owning dispatchers.
-func gateDispatch(c *Context, a action.Action) error {
-	switch a.Service {
-	case "sheet":
-		return sheetDispatch(c, a)
-	case "wecom":
-		return wecomDispatch(c, a)
-	default:
-		return fmt.Errorf("no dispatcher for service %q", a.Service)
-	}
-}
-
 func outputTail(s string, max int) string {
 	s = strings.TrimSpace(s)
-	if len(s) <= max {
+	runes := []rune(s) // cut on rune boundaries: gate output is Chinese-heavy
+	if len(runes) <= max {
 		return s
 	}
-	return "…" + s[len(s)-max:]
+	return "…" + string(runes[len(runes)-max:])
 }

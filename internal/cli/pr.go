@@ -81,11 +81,7 @@ func prDispatch(c *Context, a action.Action) error {
 		c.LastResult = url
 		fmt.Fprintf(c.Stdout, "created %s\n", url)
 		return nil
-	case "sheet":
-		return sheetDispatch(c, a)
-	case "wecom":
-		return wecomDispatch(c, a)
 	default:
-		return fmt.Errorf("no dispatcher for service %q", a.Service)
+		return routeAction(c, a)
 	}
 }

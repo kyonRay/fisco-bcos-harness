@@ -9,7 +9,7 @@ Claude Code skills + `fbh` CLI 上，无中心服务。腾讯智能表格是需�
 
 ```bash
 git clone <内部仓库地址> && cd fisco-bcos-harness
-./install.sh          # 软链 8 个 skills 到 ~/.claude/skills/，构建 bin/fbh
+./install.sh          # 软链全部 skills（共 9 个）到 ~/.claude/skills/，构建 bin/fbh
 ```
 
 把 `bin/fbh` 加进 PATH（或 `ln -s $PWD/bin/fbh /usr/local/bin/fbh`）。
@@ -21,6 +21,8 @@ git clone <内部仓库地址> && cd fisco-bcos-harness
    保管，fbh 直接复用，以你本人身份操作表格（修改记录带真实署名）。
 2. **企微 webhook key**——团队共享值，找负责人要。
 3. **表格 file_id**——团队智能表格 URL 里 `smartsheet/` 后面那段。
+4. （可选但强烈建议）**企微身份映射**——GitHub 用户名和企微 userid 不同名时
+   @会落空：`fbh config set mention_map '{"github登录名":"企微userid", ...}'`。
 
 验证：`fbh sheet ping` 列出工作表名即为链路通。
 
@@ -73,12 +75,13 @@ git clone <内部仓库地址> && cd fisco-bcos-harness
 | `fbh sheet upsert-row / set-status / claim` | 表格行操作（状态枚举强校验） |
 | `fbh pr open` | 建 PR → 回写 → 企微@ 三连 |
 | `fbh nudge run [--threshold N]` | 幂等催办 |
-| `fbh gh review-state / my-prs` | PR review 状态查询 |
+| `fbh gh review-state / my-prs / my-reviews` | PR review 状态与欠账查询 |
 | `fbh standup` | 防漏看板 |
 | `fbh gate run` | milestone 门禁 |
 
-**任何子命令加 `--dry-run`**：外部动作只打印 JSON 行不执行（gate 的门禁
-命令本身仍会跑）。skills 在真写之前都会先 dry-run 给你确认。
+**任何子命令加 `--dry-run`**：外部动作只打印 JSON 行不执行。skills 在真写
+之前都会先 dry-run 给你确认。注意 `fbh gate run --dry-run` 中**门禁命令本身
+仍会真跑**（可能数小时），dry 的只是表格/企微回写。
 
 ## 四、状态机（需求表"状态"列，CLI 强校验）
 
@@ -107,3 +110,5 @@ git clone <内部仓库地址> && cd fisco-bcos-harness
 - review 循环终止只认 reviewer 侧的 GitHub review 状态（ADR-0003）。
 - 凭证永不入库；腾讯身份是个人的，企微 key 是共享的（ADR-0006）。
 - 全部外部副作用走 fbh 单一接缝，dry-run/fake-endpoint 可测（spec）。
+  已知豁免：review 结论提交（`gh pr review`）由 /fbh-review-pr 直调 gh——
+  它天然要人参与、且 GitHub 原生状态即真相源，不经 fbh 包装。

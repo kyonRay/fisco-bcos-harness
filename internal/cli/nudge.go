@@ -62,11 +62,13 @@ func nudgeExec(c *Context) error {
 		}
 		state[pr.URL] = nudgeRecord{Date: today, Count: state[pr.URL].Count + 1}
 		nudged++
-	}
-	// Dry-run previews; it must not burn today's nudge budget.
-	if nudged > 0 && !c.dryRun {
-		if err := saveNudgeState(state); err != nil {
-			return err
+		// Save per PR (not once at the end): if a later send fails,
+		// already-sent nudges stay recorded and won't repeat on rerun.
+		// Dry-run previews must not burn today's budget.
+		if !c.dryRun {
+			if err := saveNudgeState(state); err != nil {
+				return err
+			}
 		}
 	}
 	if nudged == 0 {

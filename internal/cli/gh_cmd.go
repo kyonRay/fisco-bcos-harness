@@ -27,8 +27,10 @@ func ghExec(c *Context) error {
 		return ghReviewState(c, args)
 	case "my-prs":
 		return ghMyPRs(c)
+	case "my-reviews":
+		return ghMyReviews(c)
 	default:
-		return fmt.Errorf("unknown gh subcommand %q (available: review-state, my-prs)", sub)
+		return fmt.Errorf("unknown gh subcommand %q (available: review-state, my-prs, my-reviews)", sub)
 	}
 }
 
@@ -81,6 +83,32 @@ func ghReviewState(c *Context, args []string) error {
 		fmt.Fprintln(c.Stdout, "changes_requested")
 	default:
 		fmt.Fprintln(c.Stdout, "none")
+	}
+	return nil
+}
+
+// ghMyReviews lists open PRs where I owe review work, with the
+// four-way loop state (approved-by-me tasks are filtered out).
+func ghMyReviews(c *Context) error {
+	tasks, err := gh.MyReviewTasks()
+	if err != nil {
+		return err
+	}
+	me, err := gh.Login()
+	if err != nil {
+		return err
+	}
+	owed := 0
+	for _, pr := range tasks {
+		state := loopState(pr, me)
+		if state == "" {
+			continue
+		}
+		owed++
+		fmt.Fprintf(c.Stdout, "%s\t%s\n", pr.URL, state)
+	}
+	if owed == 0 {
+		fmt.Fprintln(c.Stdout, "no reviews owed")
 	}
 	return nil
 }

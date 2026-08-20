@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/kyonRay/fisco-bcos-harness/internal/action"
 	"github.com/kyonRay/fisco-bcos-harness/internal/config"
@@ -53,6 +54,15 @@ func wecomDispatch(c *Context, a action.Action) error {
 		return fmt.Errorf("wecom_webhook is not configured; run the /fbh-setup skill first")
 	}
 	to := payloadStr(a.Payload, "to")
+	if cfg.MentionMap != "" {
+		var m map[string]string
+		if err := json.Unmarshal([]byte(cfg.MentionMap), &m); err != nil {
+			return fmt.Errorf("parse mention_map config: %w", err)
+		}
+		if mapped := m[to]; mapped != "" {
+			to = mapped
+		}
+	}
 	msg := map[string]any{
 		"msgtype": "text",
 		"text": map[string]any{
@@ -64,7 +74,8 @@ func wecomDispatch(c *Context, a action.Action) error {
 	if err != nil {
 		return err
 	}
-	resp, err := http.Post(cfg.WecomWebhook, "application/json", bytes.NewReader(body))
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Post(cfg.WecomWebhook, "application/json", bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("wecom webhook: %w", err)
 	}

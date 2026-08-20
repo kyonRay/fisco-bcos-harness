@@ -90,24 +90,47 @@ func (r sheetRecord) text(field string) string {
 	return ""
 }
 
+// listAllRecords fetches every row of the sheet, following
+// pagination (list_records caps a page at 100 rows — without the loop,
+// rows beyond page 1 would be invisible and upserts would duplicate).
+func listAllRecords(client *mcp.Client, fileID, sheetID string) ([]sheetRecord, error) {
+	var all []sheetRecord
+	offset := 0
+	for {
+		text, err := client.CallTool("smartsheet.list_records", map[string]any{
+			"file_id":  fileID,
+			"sheet_id": sheetID,
+			"offset":   offset,
+			"limit":    100,
+		})
+		if err != nil {
+			return nil, err
+		}
+		var parsed struct {
+			Records []sheetRecord `json:"records"`
+			HasMore bool          `json:"has_more"`
+			Next    int           `json:"next"`
+		}
+		if err := json.Unmarshal([]byte(text), &parsed); err != nil {
+			return nil, fmt.Errorf("parse list_records result: %w", err)
+		}
+		all = append(all, parsed.Records...)
+		if !parsed.HasMore {
+			return all, nil
+		}
+		offset = parsed.Next
+	}
+}
+
 // findRecord looks up the row whose keyField text equals key.
 func findRecord(client *mcp.Client, fileID, sheetID, keyField, key string) (*sheetRecord, error) {
-	text, err := client.CallTool("smartsheet.list_records", map[string]any{
-		"file_id":  fileID,
-		"sheet_id": sheetID,
-	})
+	records, err := listAllRecords(client, fileID, sheetID)
 	if err != nil {
 		return nil, err
 	}
-	var parsed struct {
-		Records []sheetRecord `json:"records"`
-	}
-	if err := json.Unmarshal([]byte(text), &parsed); err != nil {
-		return nil, fmt.Errorf("parse list_records result: %w", err)
-	}
-	for i := range parsed.Records {
-		if parsed.Records[i].text(keyField) == key {
-			return &parsed.Records[i], nil
+	for i := range records {
+		if records[i].text(keyField) == key {
+			return &records[i], nil
 		}
 	}
 	return nil, nil
@@ -200,7 +223,13 @@ func dispatchClaim(c *Context, client *mcp.Client, a action.Action) error {
 	if rec == nil {
 		return fmt.Errorf("requirement %q not found in sheet %s", key, sheetID)
 	}
-	if current := rec.text(schema.ColOwner); current != "" && current != owner {
+	if current := rec.text(schema.ColOwner); current != "" {
+		if current == owner {
+			// Re-claim by the same owner is a no-op: writing again
+			// would drag an advanced status back to 开发中.
+			fmt.Fprintf(c.Stdout, "already claimed by you (%s); no change\n", owner)
+			return nil
+		}
 		return fmt.Errorf("requirement %q is already claimed by %s", key, current)
 	}
 	_, err = client.CallTool("smartsheet.update_records", map[string]any{
@@ -249,21 +278,12 @@ func dispatchCompleteMilestone(c *Context, client *mcp.Client, a action.Action) 
 	sheetID := payloadStr(a.Payload, "sheet_id")
 	milestone := payloadStr(a.Payload, "milestone")
 
-	text, err := client.CallTool("smartsheet.list_records", map[string]any{
-		"file_id":  fileID,
-		"sheet_id": sheetID,
-	})
+	records, err := listAllRecords(client, fileID, sheetID)
 	if err != nil {
 		return err
 	}
-	var parsed struct {
-		Records []sheetRecord `json:"records"`
-	}
-	if err := json.Unmarshal([]byte(text), &parsed); err != nil {
-		return fmt.Errorf("parse list_records result: %w", err)
-	}
 	completed := 0
-	for _, rec := range parsed.Records {
+	for _, rec := range records {
 		if rec.text(schema.ColMilestone) != milestone {
 			continue
 		}
@@ -282,4 +302,17 @@ func dispatchCompleteMilestone(c *Context, client *mcp.Client, a action.Action) 
 	}
 	fmt.Fprintf(c.Stdout, "completed %d requirement(s) of milestone %s\n", completed, milestone)
 	return nil
+}
+
+// routeAction sends one action to the dispatcher owning its service —
+// shared by every chain command (pr, gate).
+func routeAction(c *Context, a action.Action) error {
+	switch a.Service {
+	case "sheet":
+		return sheetDispatch(c, a)
+	case "wecom":
+		return wecomDispatch(c, a)
+	default:
+		return fmt.Errorf("no dispatcher for service %q", a.Service)
+	}
 }

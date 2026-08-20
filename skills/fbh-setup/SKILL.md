@@ -35,6 +35,13 @@ fbh config set sheet_file_id '<团队智能表格的 file_id>'
 
 file_id 从表格 URL 提取：`https://docs.qq.com/smartsheet/<file_id>?...`。
 
+团队成员 GitHub 用户名与企微 userid 不同名时（几乎必然），再配身份映射，
+否则企微@落空：
+
+```bash
+fbh config set mention_map '{"<github登录名>":"<企微userid>", ...}'
+```
+
 ## 第四步：验证链路
 
 ```bash

@@ -27,6 +27,10 @@ type Config struct {
 	// fisco-bcos-release-gate invocation); fbh wraps it, never
 	// reimplements it (ADR-0004).
 	GateCmd string `json:"gate_cmd,omitempty"`
+	// MentionMap is a JSON object mapping GitHub logins to WeCom
+	// userids, so directed @mentions actually land. Empty entries fall
+	// back to the login itself.
+	MentionMap string `json:"mention_map,omitempty"`
 }
 
 // Path returns the config file location: $FBH_CONFIG if set, else
