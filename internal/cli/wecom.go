@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/kyonRay/fisco-bcos-harness/internal/action"
@@ -53,21 +54,30 @@ func wecomDispatch(c *Context, a action.Action) error {
 	if cfg.WecomWebhook == "" {
 		return fmt.Errorf("wecom_webhook is not configured; run the /fbh-setup skill first")
 	}
-	to := payloadStr(a.Payload, "to")
+	// "to" may be a comma-separated list; each login goes through the
+	// mention_map so the WeCom @ actually lands.
+	var mentionMap map[string]string
 	if cfg.MentionMap != "" {
-		var m map[string]string
-		if err := json.Unmarshal([]byte(cfg.MentionMap), &m); err != nil {
+		if err := json.Unmarshal([]byte(cfg.MentionMap), &mentionMap); err != nil {
 			return fmt.Errorf("parse mention_map config: %w", err)
 		}
-		if mapped := m[to]; mapped != "" {
-			to = mapped
+	}
+	var mentions []string
+	for _, login := range strings.Split(payloadStr(a.Payload, "to"), ",") {
+		login = strings.TrimSpace(login)
+		if login == "" {
+			continue
 		}
+		if mapped := mentionMap[login]; mapped != "" {
+			login = mapped
+		}
+		mentions = append(mentions, login)
 	}
 	msg := map[string]any{
 		"msgtype": "text",
 		"text": map[string]any{
-			"content":        fmt.Sprintf("%s：%s %s", to, payloadStr(a.Payload, "text"), payloadStr(a.Payload, "pr")),
-			"mentioned_list": []string{to},
+			"content":        fmt.Sprintf("%s：%s %s", strings.Join(mentions, " "), payloadStr(a.Payload, "text"), payloadStr(a.Payload, "pr")),
+			"mentioned_list": mentions,
 		},
 	}
 	body, err := json.Marshal(msg)
@@ -83,6 +93,6 @@ func wecomDispatch(c *Context, a action.Action) error {
 	if resp.StatusCode >= 300 {
 		return fmt.Errorf("wecom webhook: HTTP %d", resp.StatusCode)
 	}
-	fmt.Fprintf(c.Stdout, "nudged %s about %s\n", to, payloadStr(a.Payload, "pr"))
+	fmt.Fprintf(c.Stdout, "nudged %s about %s\n", strings.Join(mentions, ","), payloadStr(a.Payload, "pr"))
 	return nil
 }

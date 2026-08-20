@@ -8,9 +8,13 @@ import (
 
 // PR is the slice of gh pr list output the harness needs.
 type PR struct {
-	Number         int       `json:"number"`
-	URL            string    `json:"url"`
-	Title          string    `json:"title"`
+	Number int    `json:"number"`
+	URL    string `json:"url"`
+	Title  string `json:"title"`
+	State  string `json:"state"`
+	Author struct {
+		Login string `json:"login"`
+	} `json:"author"`
 	CreatedAt      time.Time `json:"createdAt"`
 	UpdatedAt      time.Time `json:"updatedAt"`
 	ReviewDecision string    `json:"reviewDecision"`
@@ -83,6 +87,57 @@ func (p PR) MyLastReview(login string) (string, time.Time) {
 		}
 	}
 	return state, at
+}
+
+const prViewFields = "url,title,state,author,createdAt,updatedAt,reviewDecision,reviewRequests,latestReviews"
+
+// ViewPR fetches one PR's review-relevant state.
+func ViewPR(ref string) (PR, error) {
+	out, err := Run("pr", "view", ref, "--json", prViewFields)
+	if err != nil {
+		return PR{}, err
+	}
+	var pr PR
+	if err := json.Unmarshal([]byte(out), &pr); err != nil {
+		return PR{}, fmt.Errorf("parse gh pr view output: %w", err)
+	}
+	return pr, nil
+}
+
+// ApprovedBy returns reviewers whose latest review is APPROVED.
+func (p PR) ApprovedBy() []string {
+	var out []string
+	for _, r := range p.LatestReviews {
+		if r.State == "APPROVED" {
+			out = append(out, r.Author.Login)
+		}
+	}
+	return out
+}
+
+// PendingReviewers returns requested reviewers plus past reviewers who
+// have not approved yet.
+func (p PR) PendingReviewers() []string {
+	approved := map[string]bool{}
+	for _, login := range p.ApprovedBy() {
+		approved[login] = true
+	}
+	seen := map[string]bool{}
+	var out []string
+	add := func(login string) {
+		if login == "" || approved[login] || seen[login] {
+			return
+		}
+		seen[login] = true
+		out = append(out, login)
+	}
+	for _, r := range p.ReviewRequests {
+		add(r.Login)
+	}
+	for _, r := range p.LatestReviews {
+		add(r.Author.Login)
+	}
+	return out
 }
 
 // LastReviewAt returns the newest review submission time (zero if none).

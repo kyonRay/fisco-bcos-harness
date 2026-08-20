@@ -13,7 +13,11 @@ description: fbh harness 首次配置引导：腾讯文档授权、企微 webhoo
 - **最小接入（只治 review）**：只需 wecom_webhook + mention_map 两项，
   配完直接可用 /fbh-pr（两连）、/fbh-nudge、/fbh-review-pr、/fbh-standup。
   **跳过下面的腾讯授权和 file_id**，第四步验证改为发一条测试 nudge。
-- **完整接入**：继续走全部步骤。
+- **PR 台账接入（review 进表格，不管需求）**：最小接入 + 腾讯授权 +
+  sheet_file_id + pr_sheet_id（PR 台账工作表，7 个文本列：PR链接/标题/
+  作者/reviewers/已approve/状态/更新时间）。提 PR 自动注册台账、
+  `fbh pr sync --notify` 催未 approve 的人、`fbh pr board` 看全队欠账。
+- **完整接入**：继续走全部步骤（需求表+milestone 表）。
 
 ## 第一步：检查当前状态
 

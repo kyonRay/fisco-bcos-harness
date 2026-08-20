@@ -22,7 +22,7 @@ func configExec(c *Context) error {
 	switch c.Args[0] {
 	case "set":
 		if len(c.Args) != 3 {
-			return fmt.Errorf("usage: fbh config set <sheet_file_id|wecom_webhook|mcp_base_url|gate_cmd|mention_map> <value>")
+			return fmt.Errorf("usage: fbh config set <sheet_file_id|wecom_webhook|mcp_base_url|gate_cmd|mention_map|pr_sheet_id> <value>")
 		}
 		return configSet(c, c.Args[1], c.Args[2])
 	case "show":
@@ -48,8 +48,10 @@ func configSet(c *Context, key, value string) error {
 		cfg.GateCmd = value
 	case "mention_map":
 		cfg.MentionMap = value
+	case "pr_sheet_id":
+		cfg.PRSheetID = value
 	default:
-		return fmt.Errorf("unknown config key %q (available: sheet_file_id, wecom_webhook, mcp_base_url, gate_cmd, mention_map)", key)
+		return fmt.Errorf("unknown config key %q (available: sheet_file_id, wecom_webhook, mcp_base_url, gate_cmd, mention_map, pr_sheet_id)", key)
 	}
 	if err := config.Save(cfg); err != nil {
 		return err
@@ -69,6 +71,7 @@ func configShow(c *Context) error {
 	fmt.Fprintf(c.Stdout, "mcp_base_url:  %s\n", orUnset(cfg.MCPBaseURL))
 	fmt.Fprintf(c.Stdout, "gate_cmd:      %s\n", orUnset(cfg.GateCmd))
 	fmt.Fprintf(c.Stdout, "mention_map:   %s\n", orUnset(cfg.MentionMap))
+	fmt.Fprintf(c.Stdout, "pr_sheet_id:   %s\n", orUnset(cfg.PRSheetID))
 	return nil
 }
 

@@ -26,8 +26,33 @@ fbh config set mention_map '{"<github登录名>":"<企微userid>", ...}'
 | 被指派 review | `/fbh-review-pr`（must-fix 分级 → request-changes 循环 → 预读简报 → 人亲手 approve） |
 | 早上开工 | `/fbh-standup`（我欠谁的 / 谁欠我的，四态一目了然） |
 
-表格那半（/fbh-split、/fbh-claim、/fbh-gate、状态回写）想接的时候再走
-下面的完整配置，命令不变，加上 `--table/--key` 即自动升级为三连。
+## 零点五、PR 台账模式（推荐的第二步：review 进腾讯表格）
+
+在最小接入之上，让 PR 进智能表格——**不管需求、不管 milestone**，表格里
+记的就是 PR 本身。建一个"PR 台账"工作表（7 个文本列：
+PR链接 / 标题 / 作者 / reviewers / 已approve / 状态 / 更新时间），然后：
+
+```bash
+# 在最小接入的基础上补两项（需要腾讯文档授权，见 /fbh-setup）
+fbh config set sheet_file_id '<智能表格 file_id>'
+fbh config set pr_sheet_id  '<PR台账工作表的 sheet_id>'   # fbh sheet ping 可查
+```
+
+配好后工作流自动升级：
+
+- **提 PR**：`/fbh-pr` 建 PR 时自动在台账**注册一行**（状态=待review、
+  记下 reviewers），并推群定向@。
+- **谁想知道还有哪些 PR 待 review**：问自己的 AI，AI 跑 `fbh pr board`
+  读台账，列出所有未完结 PR（状态/reviewers/谁已 approve）。
+- **按意见修复推送后**：跑 `fbh pr sync --pr <PR链接> --notify` ——
+  从 GitHub 拉真实状态写回台账（谁 approve 了记入"已approve"列），
+  并企微**只@还没 approve 的同事**："已按 review 意见修复并推送，请继续 review"。
+- 台账状态机（由 GitHub 状态自动推导，不用手填）：
+  待review → 修复中（被 request-changes）→ 待复审（修复已推送）→
+  已approve → 已合入。
+
+需求/milestone 那半（/fbh-split、/fbh-claim、/fbh-gate、需求状态回写）
+想接的时候再走下面的完整配置，`pr open` 加 `--table/--key` 即挂上需求行。
 
 ## 一、完整安装（每人一次，约 10 分钟）
 
@@ -97,7 +122,9 @@ git clone <内部仓库地址> && cd fisco-bcos-harness
 | `fbh config set/show` | 本机配置（show 对 webhook 打码） |
 | `fbh sheet ping` | 连通性验证，列工作表 |
 | `fbh sheet upsert-row / set-status / claim` | 表格行操作（状态枚举强校验） |
-| `fbh pr open` | 建 PR → [回写] → 企微@（--table/--key 可选，不带则跳过表格） |
+| `fbh pr open` | 建 PR → [台账注册] → [需求行回写] → 企微@ |
+| `fbh pr sync --pr <url> [--notify]` | 从 GitHub 刷台账状态，@未 approve 的人 |
+| `fbh pr board` | 读台账列出所有未完结 PR |
 | `fbh nudge run [--threshold N]` | 幂等催办 |
 | `fbh gh review-state / my-prs / my-reviews` | PR review 状态与欠账查询 |
 | `fbh standup` | 防漏看板 |

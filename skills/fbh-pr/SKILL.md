@@ -7,10 +7,20 @@ description: 提交 PR 全链：建 GitHub PR 指派 reviewer → 回写团队�
 
 一条命令打穿外部服务；只在当前分支已推送到远端后使用。
 
-**两种模式**（看 `fbh config show` 的 sheet_file_id 是否配置）：
-- **最小模式**（未配表格，团队只治 review）：两连 gh.create_pr → wecom.nudge，
-  不带 --table/--key。
-- **完整模式**（表格已配）：三连，多一步表格回写，带 --table/--key。
+**三种模式**（看 `fbh config show`）：
+- **最小模式**（未配表格）：两连 gh.create_pr → wecom.nudge。
+- **PR 台账模式**（配了 pr_sheet_id）：建 PR 自动在台账注册一行
+  （PR链接为主键，状态=待review），无需任何额外参数。
+- **需求模式**（另配需求表）：再带 --table/--key 挂需求行。
+
+**作者修复后的动作**（台账模式核心闭环）：按 review 意见改完并 push 后跑
+
+```bash
+fbh pr sync --pr <PR链接> --notify
+```
+
+状态自动从 GitHub 推导写回台账（修复中→待复审），并企微只@还没
+approve 的同事继续 review。查看全队待 review 台账：`fbh pr board`。
 
 ## 流程
 

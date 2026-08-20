@@ -27,6 +27,10 @@ type Config struct {
 	// fisco-bcos-release-gate invocation); fbh wraps it, never
 	// reimplements it (ADR-0004).
 	GateCmd string `json:"gate_cmd,omitempty"`
+	// PRSheetID is the PR-ledger worksheet (PR 台账模式): rows keyed
+	// by PR URL, auto-registered by `fbh pr open` and refreshed by
+	// `fbh pr sync`. Independent of the requirement sheets.
+	PRSheetID string `json:"pr_sheet_id,omitempty"`
 	// MentionMap is a JSON object mapping GitHub logins to WeCom
 	// userids, so directed @mentions actually land. Empty entries fall
 	// back to the login itself.

@@ -22,6 +22,20 @@ const (
 	ColGateTime       = "门禁时间"
 )
 
+// PR-ledger sheet column titles (PR 台账模式: rows keyed by PR URL).
+const (
+	ColPRURL       = "PR链接"
+	ColPRTitle     = "标题"
+	ColPRAuthor    = "作者"
+	ColPRReviewers = "reviewers"
+	ColPRApproved  = "已approve"
+	ColPRStatus    = "状态"
+	ColPRUpdated   = "更新时间"
+)
+
+// PRStatuses is the PR-ledger lifecycle, in order.
+var PRStatuses = []string{"待review", "修复中", "待复审", "已approve", "已合入"}
+
 // Statuses is the sub-requirement lifecycle, in order.
 var Statuses = []string{
 	"待认领", "开发中", "待review", "review循环", "人工review", "已合入", "完成",

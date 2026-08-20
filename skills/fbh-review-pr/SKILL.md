@@ -56,8 +56,9 @@ gh pr review <PR> --comment --body "<预读简报>"
 fbh gh review-state --pr <PR>        # 确认已 approved
 ```
 
-合入由作者或 reviewer 按团队惯例执行；表格已配置时合入后作者跑
-`fbh sheet set-status ... --status 已合入`（最小模式无此步）。
+合入由作者或 reviewer 按团队惯例执行。PR 台账模式下（配了 pr_sheet_id）
+任何阶段跑 `fbh pr sync --pr <PR>` 即把最新状态（已approve 名单/已合入）
+刷回台账；需求模式下合入后作者另跑 `fbh sheet set-status ... --status 已合入`。
 
 ## 与个人 review skill 的关系
 

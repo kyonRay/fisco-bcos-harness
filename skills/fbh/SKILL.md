@@ -10,9 +10,11 @@ milestone 门禁 → 勾选完成 的全流程。腾讯智能表格是需求状�
 GitHub 是镜像；所有外部副作用（表格/企微/GitHub）经 `fbh` CLI 执行，
 `fbh <命令> --dry-run` 可预览动作而不产生副作用。
 
-**支持渐进接入**：最小模式只配企微 webhook 治 PR review（pr/nudge/
-review-pr/standup 四件套，不碰表格）；表格配好后同一套命令自动升级为
-含需求状态回写的完整模式。详见 docs/usage.md 第零节。
+**支持渐进接入**（详见 docs/usage.md 第零、零点五节）：
+1. 最小模式：只配企微 webhook，pr/nudge/review-pr/standup 四件套治 review；
+2. PR 台账模式：+pr_sheet_id，PR 自动注册进智能表格，pr sync --notify
+   催未 approve 的人，pr board 看全队欠账，不碰需求/milestone；
+3. 完整模式：+需求表/milestone 表，split/claim/gate 全流程。
 
 ## 命令面
 
