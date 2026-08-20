@@ -1,0 +1,6 @@
+# build output
+/bin/
+
+# local credentials (ticket 02): never commit
+/.fbh.env
+*.credential
