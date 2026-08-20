@@ -24,7 +24,7 @@ func registerFakeCmd(t *testing.T, name string) *int {
 				Payload: map[string]any{"pr": "https://example.com/pr/42"},
 			})
 		},
-		Dispatch: func(a action.Action) error {
+		Dispatch: func(c *Context, a action.Action) error {
 			dispatched++
 			return nil
 		},

@@ -16,7 +16,7 @@ type Command struct {
 	Name     string
 	Summary  string
 	Exec     func(*Context) error
-	Dispatch func(action.Action) error
+	Dispatch func(*Context, action.Action) error
 }
 
 // Context is passed to a Command's Exec.
@@ -26,7 +26,7 @@ type Context struct {
 	Args   []string // arguments after the subcommand name, flags stripped
 
 	dryRun   bool
-	dispatch func(action.Action) error
+	dispatch func(*Context, action.Action) error
 }
 
 // Do routes one Action: printed as a JSON line in dry-run mode,
@@ -40,7 +40,10 @@ func (c *Context) Do(a action.Action) error {
 		fmt.Fprintln(c.Stdout, string(line))
 		return nil
 	}
-	return c.dispatch(a)
+	if c.dispatch == nil {
+		return fmt.Errorf("command has no dispatcher for action %s.%s", a.Service, a.Op)
+	}
+	return c.dispatch(c, a)
 }
 
 var registry = map[string]Command{}
