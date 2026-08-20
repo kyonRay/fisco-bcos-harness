@@ -5,7 +5,31 @@ fbh 是团队工作流 harness：需求拆分 → 认领 → 开发 → PR → A
 Claude Code skills + `fbh` CLI 上，无中心服务。腾讯智能表格是需求状态的
 唯一真相源，GitHub 是镜像。
 
-## 一、安装（每人一次，约 10 分钟）
+## 零、最小接入：只治 PR review（推荐起步，5 分钟/人）
+
+不动需求表、不碰 milestone、不需要腾讯文档授权——只解决"催 review 靠吼、
+循环没终点、人工 review 走过场"：
+
+```bash
+git clone https://github.com/kyonRay/fisco-bcos-harness.git && cd fisco-bcos-harness
+./install.sh
+fbh config set wecom_webhook '<企微群机器人 webhook URL>'
+fbh config set mention_map '{"<github登录名>":"<企微userid>", ...}'
+```
+
+日常只用四个动作：
+
+| 场景 | 命令/skill |
+|---|---|
+| 提 PR | `/fbh-pr`（不带表格参数 → 建 PR + 企微定向@ 两连） |
+| 没人理 | `/fbh-nudge`（超 24h 才催、同日幂等、不骚扰在等作者的） |
+| 被指派 review | `/fbh-review-pr`（must-fix 分级 → request-changes 循环 → 预读简报 → 人亲手 approve） |
+| 早上开工 | `/fbh-standup`（我欠谁的 / 谁欠我的，四态一目了然） |
+
+表格那半（/fbh-split、/fbh-claim、/fbh-gate、状态回写）想接的时候再走
+下面的完整配置，命令不变，加上 `--table/--key` 即自动升级为三连。
+
+## 一、完整安装（每人一次，约 10 分钟）
 
 ```bash
 git clone <内部仓库地址> && cd fisco-bcos-harness
@@ -73,7 +97,7 @@ git clone <内部仓库地址> && cd fisco-bcos-harness
 | `fbh config set/show` | 本机配置（show 对 webhook 打码） |
 | `fbh sheet ping` | 连通性验证，列工作表 |
 | `fbh sheet upsert-row / set-status / claim` | 表格行操作（状态枚举强校验） |
-| `fbh pr open` | 建 PR → 回写 → 企微@ 三连 |
+| `fbh pr open` | 建 PR → [回写] → 企微@（--table/--key 可选，不带则跳过表格） |
 | `fbh nudge run [--threshold N]` | 幂等催办 |
 | `fbh gh review-state / my-prs / my-reviews` | PR review 状态与欠账查询 |
 | `fbh standup` | 防漏看板 |

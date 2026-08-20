@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/kyonRay/fisco-bcos-harness/internal/action"
+	"github.com/kyonRay/fisco-bcos-harness/internal/config"
 	"github.com/kyonRay/fisco-bcos-harness/internal/gh"
 	"github.com/kyonRay/fisco-bcos-harness/internal/schema"
 )
@@ -25,14 +26,26 @@ func prExec(c *Context) error {
 	if err != nil {
 		return err
 	}
-	for _, req := range []string{"title", "reviewer", "table", "key"} {
+	for _, req := range []string{"title", "reviewer"} {
 		if flags[req] == "" {
-			return fmt.Errorf("--%s is required (usage: fbh pr open --title <t> --body <b> --reviewer <r> --table <sheet_id> --key <需求名>)", req)
+			return fmt.Errorf("--%s is required (usage: fbh pr open --title <t> --body <b> --reviewer <r> [--table <sheet_id> --key <需求名>])", req)
 		}
 	}
-	cfg, err := requireSheetConfig()
+	// The sheet write-back is optional: minimal adoption (只治 review)
+	// runs without any Tencent-sheet configuration. It engages only
+	// when --table/--key are passed, which then requires sheet config.
+	cfg, err := config.Load()
 	if err != nil {
 		return err
+	}
+	writeBack := flags["table"] != "" || flags["key"] != ""
+	if writeBack {
+		if flags["table"] == "" || flags["key"] == "" {
+			return fmt.Errorf("--table and --key must be given together")
+		}
+		if cfg.SheetFileID == "" {
+			return fmt.Errorf("--table given but sheet_file_id is not configured; run the /fbh-setup skill first")
+		}
 	}
 
 	// 1. Create the PR with the reviewer assigned.
@@ -49,13 +62,16 @@ func prExec(c *Context) error {
 	}
 	prURL := c.LastResult
 
-	// 2. Write the PR link back to the requirement row (embedded sync).
-	if err := c.Do(upsertAction(cfg.SheetFileID, flags["table"], schema.ColRequirement, flags["key"],
-		map[string]any{
-			schema.ColPRLink: prURL,
-			schema.ColStatus: "待review",
-		})); err != nil {
-		return err
+	// 2. Write the PR link back to the requirement row (embedded sync),
+	// when the sheet half of the workflow is in use.
+	if writeBack {
+		if err := c.Do(upsertAction(cfg.SheetFileID, flags["table"], schema.ColRequirement, flags["key"],
+			map[string]any{
+				schema.ColPRLink: prURL,
+				schema.ColStatus: "待review",
+			})); err != nil {
+			return err
+		}
 	}
 
 	// 3. Directed WeCom mention to the assigned reviewer.

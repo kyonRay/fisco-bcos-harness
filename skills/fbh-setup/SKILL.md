@@ -5,8 +5,15 @@ description: fbh harness 首次配置引导：腾讯文档授权、企微 webhoo
 
 # /fbh-setup — 凭证与表格配置引导
 
-逐项检查并引导用户补齐三项配置。凭证只落本机（`~/.fbh/config.json`，0600 权限），
+逐项检查并引导用户补齐配置。凭证只落本机（`~/.fbh/config.json`，0600 权限），
 永不入任何 git 仓库（ADR-0006）。
+
+## 第零步：先问接入模式
+
+- **最小接入（只治 review）**：只需 wecom_webhook + mention_map 两项，
+  配完直接可用 /fbh-pr（两连）、/fbh-nudge、/fbh-review-pr、/fbh-standup。
+  **跳过下面的腾讯授权和 file_id**，第四步验证改为发一条测试 nudge。
+- **完整接入**：继续走全部步骤。
 
 ## 第一步：检查当前状态
 

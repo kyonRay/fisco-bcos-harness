@@ -30,8 +30,7 @@ description: reviewer 侧 AI review 循环：对被指派的 PR 做完整 review
 gh pr review <PR> --request-changes --body "<分级意见全文>"
 ```
 
-然后跑 `fbh sheet set-status --table <需求表> --key "<需求名>" --status review循环`
-（首轮时；已是该状态则跳过）。作者改完会用 /fbh-nudge 催复审。
+然后（仅表格已配置时，看 `fbh config show`）跑 `fbh sheet set-status --table <需求表> --key "<需求名>" --status review循环`（首轮时）。最小接入模式没有表格，跳过。作者改完会用 /fbh-nudge 催复审。
 
 **无 must-fix** → 发预读简报，进入人工阶段：
 
@@ -48,7 +47,7 @@ gh pr review <PR> --comment --body "<预读简报>"
 3. **AI 自报验证不了的点**：需要业务/领域知识的判断、未能实证的并发时序假设、
    测试未覆盖的路径。这是人工不可替代的部分，绝不许写"无"敷衍。
 
-发完简报跑 `fbh sheet set-status ... --status 人工review`，并告诉 reviewer：
+发完简报（表格已配置时）跑 `fbh sheet set-status ... --status 人工review`；最小模式跳过。然后告诉 reviewer：
 "简报已发，请重点看热图中 load-bearing 条目和第 3 节盲区，看完自行 approve。"
 
 ### 3. 人工 approve 之后（reviewer 本人按完 approve 再回来）
@@ -57,8 +56,8 @@ gh pr review <PR> --comment --body "<预读简报>"
 fbh gh review-state --pr <PR>        # 确认已 approved
 ```
 
-合入由作者或 reviewer 按团队惯例执行；合入后作者跑
-`fbh sheet set-status ... --status 已合入`。
+合入由作者或 reviewer 按团队惯例执行；表格已配置时合入后作者跑
+`fbh sheet set-status ... --status 已合入`（最小模式无此步）。
 
 ## 与个人 review skill 的关系
 
