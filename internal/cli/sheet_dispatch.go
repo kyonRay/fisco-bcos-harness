@@ -49,6 +49,8 @@ func sheetDispatch(c *Context, a action.Action) error {
 		return dispatchUpsertRow(c, client, a)
 	case "claim":
 		return dispatchClaim(c, client, a)
+	case "complete_milestone":
+		return dispatchCompleteMilestone(c, client, a)
 	}
 	tool, ok := sheetToolName[a.Op]
 	if !ok {
@@ -237,5 +239,47 @@ func renderSheetResult(c *Context, op, text string) error {
 		}
 	}
 	fmt.Fprintln(c.Stdout, text)
+	return nil
+}
+
+// dispatchCompleteMilestone sets 状态=完成 on every requirement row of
+// the given milestone, leaving other milestones' rows untouched.
+func dispatchCompleteMilestone(c *Context, client *mcp.Client, a action.Action) error {
+	fileID := payloadStr(a.Payload, "file_id")
+	sheetID := payloadStr(a.Payload, "sheet_id")
+	milestone := payloadStr(a.Payload, "milestone")
+
+	text, err := client.CallTool("smartsheet.list_records", map[string]any{
+		"file_id":  fileID,
+		"sheet_id": sheetID,
+	})
+	if err != nil {
+		return err
+	}
+	var parsed struct {
+		Records []sheetRecord `json:"records"`
+	}
+	if err := json.Unmarshal([]byte(text), &parsed); err != nil {
+		return fmt.Errorf("parse list_records result: %w", err)
+	}
+	completed := 0
+	for _, rec := range parsed.Records {
+		if rec.text(schema.ColMilestone) != milestone {
+			continue
+		}
+		_, err := client.CallTool("smartsheet.update_records", map[string]any{
+			"file_id":  fileID,
+			"sheet_id": sheetID,
+			"records": []map[string]any{{
+				"record_id":    rec.RecordID,
+				"field_values": textEntries(map[string]any{schema.ColStatus: "完成"}),
+			}},
+		})
+		if err != nil {
+			return err
+		}
+		completed++
+	}
+	fmt.Fprintf(c.Stdout, "completed %d requirement(s) of milestone %s\n", completed, milestone)
 	return nil
 }

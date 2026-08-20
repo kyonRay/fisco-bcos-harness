@@ -10,7 +10,7 @@ milestone 门禁 → 勾选完成 的全流程。腾讯智能表格是需求状�
 GitHub 是镜像；所有外部副作用（表格/企微/GitHub）经 `fbh` CLI 执行，
 `fbh <命令> --dry-run` 可预览动作而不产生副作用。
 
-## 命令面（按施工票逐步落地）
+## 命令面
 
 | skill | 作用 | 状态 |
 |---|---|---|
@@ -21,6 +21,4 @@ GitHub 是镜像；所有外部副作用（表格/企微/GitHub）经 `fbh` CLI 
 | /fbh-nudge | 幂等催办 | ✅ 已落地 |
 | /fbh-review-pr | reviewer 侧 AI review 循环 | ✅ 已落地 |
 | /fbh-standup | 防漏看板 | ✅ 已落地 |
-| /gate | milestone 门禁 | 票 08 |
-
-尚未落地的命令请勿臆造行为；告知用户对应施工票编号。
+| /fbh-gate | milestone 门禁 | ✅ 已落地 |

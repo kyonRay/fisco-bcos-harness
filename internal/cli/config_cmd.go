@@ -44,8 +44,10 @@ func configSet(c *Context, key, value string) error {
 		cfg.WecomWebhook = value
 	case "mcp_base_url":
 		cfg.MCPBaseURL = value
+	case "gate_cmd":
+		cfg.GateCmd = value
 	default:
-		return fmt.Errorf("unknown config key %q (available: sheet_file_id, wecom_webhook, mcp_base_url)", key)
+		return fmt.Errorf("unknown config key %q (available: sheet_file_id, wecom_webhook, mcp_base_url, gate_cmd)", key)
 	}
 	if err := config.Save(cfg); err != nil {
 		return err
@@ -63,6 +65,7 @@ func configShow(c *Context) error {
 	fmt.Fprintf(c.Stdout, "sheet_file_id: %s\n", orUnset(cfg.SheetFileID))
 	fmt.Fprintf(c.Stdout, "wecom_webhook: %s\n", redactWebhook(cfg.WecomWebhook))
 	fmt.Fprintf(c.Stdout, "mcp_base_url:  %s\n", orUnset(cfg.MCPBaseURL))
+	fmt.Fprintf(c.Stdout, "gate_cmd:      %s\n", orUnset(cfg.GateCmd))
 	return nil
 }
 

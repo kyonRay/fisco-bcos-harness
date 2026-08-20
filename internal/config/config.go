@@ -23,6 +23,10 @@ type Config struct {
 	// MCPBaseURL overrides the Tencent Docs MCP endpoint (tests use
 	// this to point at a fake server). Empty means the production URL.
 	MCPBaseURL string `json:"mcp_base_url,omitempty"`
+	// GateCmd is the shell command that runs the milestone gate (the
+	// fisco-bcos-release-gate invocation); fbh wraps it, never
+	// reimplements it (ADR-0004).
+	GateCmd string `json:"gate_cmd,omitempty"`
 }
 
 // Path returns the config file location: $FBH_CONFIG if set, else
