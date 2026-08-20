@@ -14,7 +14,7 @@ import (
 func init() {
 	Register(Command{
 		Name:     "pr",
-		Summary:  "open a PR and run the full chain: create → sheet write-back → WeCom nudge",
+		Summary:  "open a PR and register it in the ledger; sheet automation sends the notifications",
 		Exec:     prExec,
 		Dispatch: prDispatch,
 	})
@@ -82,7 +82,9 @@ func prOpen(c *Context, args []string) error {
 	prURL := c.LastResult
 
 	// 2a. Register the PR in the PR ledger (PR 台账模式): rows keyed by
-	// PR URL, so the whole team's AIs can see what awaits review.
+	// PR URL, so the whole team's AIs can see what awaits review. The
+	// row add itself is the notification: the sheet's 添加记录提醒到群
+	// automation announces it — fbh sends nothing directly.
 	if cfg.PRSheetID != "" {
 		author, err := gh.Login()
 		if err != nil {
@@ -95,6 +97,7 @@ func prOpen(c *Context, args []string) error {
 				schema.ColPRReviewers: flags["reviewer"],
 				schema.ColPRApproved:  "",
 				schema.ColPRStatus:    "待review",
+				schema.ColPRPending:   flags["reviewer"],
 				schema.ColPRUpdated:   time.Now().Format("2006-01-02 15:04"),
 			})); err != nil {
 			return err
@@ -112,9 +115,7 @@ func prOpen(c *Context, args []string) error {
 			return err
 		}
 	}
-
-	// 3. Directed WeCom mention to the assigned reviewer.
-	return c.Do(nudgeAction(flags["reviewer"], prURL, "新 PR 请 review"))
+	return nil
 }
 
 // prDispatch routes the chain's actions to the owning dispatcher.
@@ -158,24 +159,16 @@ func prLedgerStatus(pr gh.PR) string {
 	return "待review"
 }
 
-// prSync refreshes one PR's ledger row from GitHub; --notify mentions
-// the reviewers who have not approved yet (继续 review).
+// prSync refreshes one PR's ledger row from GitHub. 待处理人 becomes
+// the reviewers who have not approved yet; the sheet's 修改后提醒负责人
+// automation notifies them off that column — fbh sends nothing itself.
 func prSync(c *Context, args []string) error {
-	notify := false
-	rest := make([]string, 0, len(args))
-	for _, arg := range args { // --notify is a boolean switch
-		if arg == "--notify" {
-			notify = true
-			continue
-		}
-		rest = append(rest, arg)
-	}
-	flags, _, err := parseFlags(rest)
+	flags, _, err := parseFlags(args)
 	if err != nil {
 		return err
 	}
 	if flags["pr"] == "" {
-		return fmt.Errorf("usage: fbh pr sync --pr <PR链接> [--notify]")
+		return fmt.Errorf("usage: fbh pr sync --pr <PR链接>")
 	}
 	cfg, err := requireSheetConfig()
 	if err != nil {
@@ -190,27 +183,23 @@ func prSync(c *Context, args []string) error {
 		return err
 	}
 	status := prLedgerStatus(pr)
+	pending := pr.PendingReviewers()
+	if status == "已approve" || status == "已合入" {
+		pending = nil // finished work must not keep pinging anyone
+	}
 	if err := c.Do(upsertAction(cfg.SheetFileID, cfg.PRSheetID, schema.ColPRURL, pr.URL,
 		map[string]any{
 			schema.ColPRTitle:    pr.Title,
 			schema.ColPRAuthor:   pr.Author.Login,
 			schema.ColPRApproved: strings.Join(pr.ApprovedBy(), ","),
 			schema.ColPRStatus:   status,
+			schema.ColPRPending:  strings.Join(pending, ","),
 			schema.ColPRUpdated:  time.Now().Format("2006-01-02 15:04"),
 		})); err != nil {
 		return err
 	}
-	fmt.Fprintf(c.Stdout, "synced %s -> %s\n", pr.URL, status)
-
-	pending := pr.PendingReviewers()
-	if !notify || len(pending) == 0 || status == "已approve" || status == "已合入" {
-		return nil
-	}
-	msg := "PR 有更新，请继续 review"
-	if status == "待复审" {
-		msg = "已按 review 意见修复并推送，请继续 review"
-	}
-	return c.Do(nudgeAction(strings.Join(pending, ","), pr.URL, msg))
+	fmt.Fprintf(c.Stdout, "synced %s -> %s (待处理人: %s)\n", pr.URL, status, strings.Join(pending, ","))
+	return nil
 }
 
 func prBoard(c *Context) error {

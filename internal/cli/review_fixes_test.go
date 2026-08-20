@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -96,34 +94,8 @@ func TestClaimByCurrentOwnerIsNoOp(t *testing.T) {
 	}
 }
 
-func TestWecomNudgeTranslatesLoginViaMentionMap(t *testing.T) {
-	wecom := &fakeWecom{}
-	srv := wecom.start(t)
-	defer srv.Close()
-	cfgPath := filepath.Join(t.TempDir(), "config.json")
-	t.Setenv("FBH_CONFIG", cfgPath)
-	cfgJSON, _ := json.Marshal(map[string]string{
-		"wecom_webhook": srv.URL,
-		"sheet_file_id": "SHEET123",
-		"mention_map":   `{"lisi":"LiSi-WeCom-Id"}`,
-	})
-	if err := os.WriteFile(cfgPath, cfgJSON, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	var stdout, stderr bytes.Buffer
-
-	code := Run([]string{"wecom", "nudge", "--to", "lisi", "--pr", "https://x/pull/1"}, &stdout, &stderr)
-
-	if code != 0 {
-		t.Fatalf("exit = %d, stderr: %s", code, stderr.String())
-	}
-	if !strings.Contains(wecom.bodies[0], "LiSi-WeCom-Id") {
-		t.Fatalf("mentioned_list must use the mapped WeCom id, got: %s", wecom.bodies[0])
-	}
-}
-
 func TestGhMyReviewsSubcommandListsLoopStates(t *testing.T) {
-	nudgeEnv(t)
+	ghEnv(t)
 	requested, reviewed := reviewFixtures()
 	standupStub(t, "[]", requested, reviewed)
 	var stdout, stderr bytes.Buffer

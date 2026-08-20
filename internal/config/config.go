@@ -2,8 +2,8 @@
 //
 // Credentials policy (ADR-0006): the Tencent Docs token is NOT stored
 // here — fbh reuses the token the tencent-docs skill's auth flow saved
-// into mcporter's config. fbh's own file only holds the team sheet id
-// and the shared WeCom webhook key, and never enters any git repo.
+// into mcporter's config. fbh's own file only holds sheet ids and the
+// gate command, and never enters any git repo.
 package config
 
 import (
@@ -18,8 +18,6 @@ type Config struct {
 	// SheetFileID is the file_id of the team's Tencent smart sheet
 	// (the requirement-status source of truth).
 	SheetFileID string `json:"sheet_file_id,omitempty"`
-	// WecomWebhook is the team-shared WeCom group bot webhook URL.
-	WecomWebhook string `json:"wecom_webhook,omitempty"`
 	// MCPBaseURL overrides the Tencent Docs MCP endpoint (tests use
 	// this to point at a fake server). Empty means the production URL.
 	MCPBaseURL string `json:"mcp_base_url,omitempty"`
@@ -31,10 +29,6 @@ type Config struct {
 	// by PR URL, auto-registered by `fbh pr open` and refreshed by
 	// `fbh pr sync`. Independent of the requirement sheets.
 	PRSheetID string `json:"pr_sheet_id,omitempty"`
-	// MentionMap is a JSON object mapping GitHub logins to WeCom
-	// userids, so directed @mentions actually land. Empty entries fall
-	// back to the login itself.
-	MentionMap string `json:"mention_map,omitempty"`
 }
 
 // Path returns the config file location: $FBH_CONFIG if set, else

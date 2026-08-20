@@ -80,8 +80,10 @@ func gateExec(c *Context) error {
 		return nil
 	}
 
-	// Fail: file a defect row and nudge the attributed author (the
-	// /fbh-gate skill does the semantic attribution; fallback = owner).
+	// Fail: file a defect row attributed to the author (the /fbh-gate
+	// skill does the semantic attribution; fallback = owner). The row
+	// add is the notification — the sheet's 添加记录提醒 automation
+	// announces it; fbh sends nothing directly.
 	assignee := flags["assignee"]
 	if assignee == "" {
 		assignee = flags["owner"]
@@ -94,10 +96,6 @@ func gateExec(c *Context) error {
 			schema.ColStatus:    "待认领",
 			schema.ColNotes:     "gate-defect: " + tail,
 		})); err != nil {
-		return err
-	}
-	if err := c.Do(nudgeAction(assignee, defectKey,
-		fmt.Sprintf("milestone %s 门禁失败，缺陷行已建，请认领排查。失败尾部输出：%s", milestone, tail))); err != nil {
 		return err
 	}
 	return fmt.Errorf("gate failed for milestone %s (defect row %s filed)", milestone, defectKey)

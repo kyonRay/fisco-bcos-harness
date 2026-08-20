@@ -12,11 +12,8 @@ import (
 
 // ledgerEnv: PR-ledger mode — sheet configured with pr_sheet_id but the
 // requirement half stays unused.
-func ledgerEnv(t *testing.T, ghStubBody string) (*fakeWecom, *recordsMCPServer) {
+func ledgerEnv(t *testing.T, ghStubBody string) *recordsMCPServer {
 	t.Helper()
-	wecom := &fakeWecom{}
-	wecomSrv := wecom.start(t)
-	t.Cleanup(wecomSrv.Close)
 	mcpSrv := &recordsMCPServer{existing: noRecords}
 	mcpTS := mcpSrv.start(t)
 	t.Cleanup(mcpTS.Close)
@@ -27,18 +24,44 @@ func ledgerEnv(t *testing.T, ghStubBody string) (*fakeWecom, *recordsMCPServer) 
 	cfgJSON, _ := json.Marshal(map[string]string{
 		"sheet_file_id": "SHEET123",
 		"pr_sheet_id":   "prlog",
-		"wecom_webhook": wecomSrv.URL,
 		"mcp_base_url":  mcpTS.URL,
 	})
 	if err := os.WriteFile(cfgPath, cfgJSON, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	writeGhStub(t, ghStubBody)
-	return wecom, mcpSrv
+	return mcpSrv
 }
 
-func TestPrOpenRegistersInPRLedger(t *testing.T) {
-	wecom, mcpSrv := ledgerEnv(t, `case "$1 $2" in
+// capturedField digs one column's text out of a captured add/update
+// request (the smartsheet argument shape).
+func capturedField(t *testing.T, args map[string]any, field string) (string, bool) {
+	t.Helper()
+	records, _ := args["records"].([]any)
+	for _, r := range records {
+		rm, _ := r.(map[string]any)
+		fvs, _ := rm["field_values"].([]any)
+		for _, fv := range fvs {
+			fvm, _ := fv.(map[string]any)
+			if fvm["field"] != field {
+				continue
+			}
+			tv, _ := fvm["text_value"].(map[string]any)
+			items, _ := tv["items"].([]any)
+			var sb strings.Builder
+			for _, it := range items {
+				im, _ := it.(map[string]any)
+				s, _ := im["text"].(string)
+				sb.WriteString(s)
+			}
+			return sb.String(), true
+		}
+	}
+	return "", false
+}
+
+func TestPrOpenRegistersInPRLedgerWithPendingReviewers(t *testing.T) {
+	mcpSrv := ledgerEnv(t, `case "$1 $2" in
 "pr create") echo "https://github.com/t/r/pull/9" ;;
 "api user") echo "zhangsan" ;;
 *) echo "unexpected: $*" >&2; exit 1 ;;
@@ -50,23 +73,19 @@ esac`)
 	if code != 0 {
 		t.Fatalf("exit = %d, stderr: %s", code, stderr.String())
 	}
+	if len(mcpSrv.added) != 1 {
+		t.Fatalf("ledger rows added = %d, want 1", len(mcpSrv.added))
+	}
 	body, _ := json.Marshal(mcpSrv.added)
-	for _, want := range []string{`"sheet_id":"prlog"`, "pull/9", "待review", "lisi,wangwu", "zhangsan", "feat: y"} {
+	for _, want := range []string{`"sheet_id":"prlog"`, "pull/9", "待review", "zhangsan", "feat: y"} {
 		if !strings.Contains(string(body), want) {
 			t.Fatalf("ledger row missing %q in %s", want, body)
 		}
 	}
-	if len(wecom.bodies) != 1 {
-		t.Fatalf("wecom sent %d, want 1", len(wecom.bodies))
-	}
-	var msg struct {
-		Text struct {
-			MentionedList []string `json:"mentioned_list"`
-		} `json:"text"`
-	}
-	json.Unmarshal([]byte(wecom.bodies[0]), &msg)
-	if len(msg.Text.MentionedList) != 2 {
-		t.Fatalf("both reviewers must be mentioned, got %v", msg.Text.MentionedList)
+	// 待处理人 drives the sheet's directed-reminder automation: it must
+	// start as the full reviewer list.
+	if got, ok := capturedField(t, mcpSrv.added[0], "待处理人"); !ok || got != "lisi,wangwu" {
+		t.Fatalf("待处理人 = %q (found=%v), want lisi,wangwu", got, ok)
 	}
 }
 
@@ -77,7 +96,7 @@ func syncViewStub(fixtureEnv string) string {
 esac`, fixtureEnv)
 }
 
-func TestPrSyncFixedPRBecomesPendingRereviewAndNotifiesOnlyUnapproved(t *testing.T) {
+func TestPrSyncFixedPRBecomesPendingRereviewWithOnlyUnapprovedPending(t *testing.T) {
 	// lisi request-changed 20h ago, wangwu approved; author pushed 5h ago.
 	fixture := fmt.Sprintf(`{"url":"https://github.com/t/r/pull/9","title":"feat: y","state":"OPEN",
 "author":{"login":"zhangsan"},"createdAt":%q,"updatedAt":%q,"reviewDecision":"CHANGES_REQUESTED",
@@ -86,48 +105,49 @@ func TestPrSyncFixedPRBecomesPendingRereviewAndNotifiesOnlyUnapproved(t *testing
  {"author":{"login":"wangwu"},"state":"APPROVED","submittedAt":%q}]}`,
 		ago(50), ago(5), ago(20), ago(10))
 	t.Setenv("FBH_TEST_VIEW", fixture)
-	wecom, mcpSrv := ledgerEnv(t, syncViewStub("FBH_TEST_VIEW"))
+	mcpSrv := ledgerEnv(t, syncViewStub("FBH_TEST_VIEW"))
 	var stdout, stderr bytes.Buffer
 
-	code := Run([]string{"pr", "sync", "--pr", "https://github.com/t/r/pull/9", "--notify"}, &stdout, &stderr)
+	code := Run([]string{"pr", "sync", "--pr", "https://github.com/t/r/pull/9"}, &stdout, &stderr)
 
 	if code != 0 {
 		t.Fatalf("exit = %d, stderr: %s", code, stderr.String())
 	}
-	body, _ := json.Marshal(mcpSrv.added)
-	for _, want := range []string{"待复审", "wangwu"} { // 已approve 列记 wangwu
-		if !strings.Contains(string(body), want) {
-			t.Fatalf("synced row missing %q in %s", want, body)
-		}
+	if len(mcpSrv.added) != 1 {
+		t.Fatalf("ledger rows added = %d, want 1", len(mcpSrv.added))
 	}
-	if len(wecom.bodies) != 1 {
-		t.Fatalf("wecom sent %d, want 1", len(wecom.bodies))
+	if got, _ := capturedField(t, mcpSrv.added[0], "状态"); got != "待复审" {
+		t.Fatalf("状态 = %q, want 待复审", got)
 	}
-	if !strings.Contains(wecom.bodies[0], "lisi") || strings.Contains(wecom.bodies[0], `"wangwu"`) {
-		t.Fatalf("must mention only the un-approved lisi, got: %s", wecom.bodies[0])
+	if got, _ := capturedField(t, mcpSrv.added[0], "已approve"); got != "wangwu" {
+		t.Fatalf("已approve = %q, want wangwu", got)
+	}
+	// Only the un-approved lisi stays pending — the sheet automation
+	// reminds off this column, so wangwu must NOT reappear here.
+	if got, _ := capturedField(t, mcpSrv.added[0], "待处理人"); got != "lisi" {
+		t.Fatalf("待处理人 = %q, want lisi", got)
 	}
 }
 
-func TestPrSyncApprovedPRNotifiesNobody(t *testing.T) {
+func TestPrSyncApprovedPRClearsPending(t *testing.T) {
 	fixture := fmt.Sprintf(`{"url":"https://github.com/t/r/pull/9","title":"feat: y","state":"OPEN",
 "author":{"login":"zhangsan"},"createdAt":%q,"updatedAt":%q,"reviewDecision":"APPROVED",
 "reviewRequests":[],"latestReviews":[{"author":{"login":"lisi"},"state":"APPROVED","submittedAt":%q}]}`,
 		ago(50), ago(5), ago(6))
 	t.Setenv("FBH_TEST_VIEW", fixture)
-	wecom, mcpSrv := ledgerEnv(t, syncViewStub("FBH_TEST_VIEW"))
+	mcpSrv := ledgerEnv(t, syncViewStub("FBH_TEST_VIEW"))
 	var stdout, stderr bytes.Buffer
 
-	code := Run([]string{"pr", "sync", "--pr", "https://github.com/t/r/pull/9", "--notify"}, &stdout, &stderr)
+	code := Run([]string{"pr", "sync", "--pr", "https://github.com/t/r/pull/9"}, &stdout, &stderr)
 
 	if code != 0 {
 		t.Fatalf("exit = %d, stderr: %s", code, stderr.String())
 	}
-	body, _ := json.Marshal(mcpSrv.added)
-	if !strings.Contains(string(body), "已approve") {
-		t.Fatalf("synced row must be 已approve, got %s", body)
+	if got, _ := capturedField(t, mcpSrv.added[0], "状态"); got != "已approve" {
+		t.Fatalf("状态 = %q, want 已approve", got)
 	}
-	if len(wecom.bodies) != 0 {
-		t.Fatalf("approved PR must notify nobody, sent %d", len(wecom.bodies))
+	if got, ok := capturedField(t, mcpSrv.added[0], "待处理人"); !ok || got != "" {
+		t.Fatalf("待处理人 = %q (found=%v), want cleared — nobody left to remind", got, ok)
 	}
 }
 
@@ -141,7 +161,7 @@ const ledgerRows = `{"total":2,"records":[
   {"field":"状态","text_value":{"items":[{"type":"text","text":"已合入"}]}}]}]}`
 
 func TestPrBoardListsOnlyOpenWork(t *testing.T) {
-	_, mcpSrv := ledgerEnv(t, `echo "unexpected: $*" >&2; exit 1`)
+	mcpSrv := ledgerEnv(t, `echo "unexpected: $*" >&2; exit 1`)
 	mcpSrv.existing = ledgerRows
 	var stdout, stderr bytes.Buffer
 

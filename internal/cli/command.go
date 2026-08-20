@@ -57,7 +57,7 @@ func (c *Context) Do(a action.Action) error {
 var registry = map[string]Command{}
 
 // Register adds a subcommand to fbh. Later tickets register the real
-// sheet/wecom/gh commands; tests register fakes.
+// sheet/gh commands; tests register fakes.
 func Register(cmd Command) {
 	registry[cmd.Name] = cmd
 }

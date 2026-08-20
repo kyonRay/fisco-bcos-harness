@@ -11,12 +11,10 @@ import (
 	"github.com/kyonRay/fisco-bcos-harness/internal/action"
 )
 
-// fullChainEnv wires stub gh + fake wecom + fake MCP together.
-func fullChainEnv(t *testing.T) (*fakeWecom, *recordsMCPServer) {
+// fullChainEnv wires stub gh + fake MCP together (requirement half in
+// use, no PR ledger).
+func fullChainEnv(t *testing.T) *recordsMCPServer {
 	t.Helper()
-	wecom := &fakeWecom{}
-	wecomSrv := wecom.start(t)
-	t.Cleanup(wecomSrv.Close)
 	mcpSrv := &recordsMCPServer{existing: loginRecordUnowned}
 	mcpTS := mcpSrv.start(t)
 	t.Cleanup(mcpTS.Close)
@@ -24,7 +22,7 @@ func fullChainEnv(t *testing.T) (*fakeWecom, *recordsMCPServer) {
 	cfgPath := filepath.Join(t.TempDir(), "config.json")
 	t.Setenv("FBH_CONFIG", cfgPath)
 	t.Setenv("FBH_MCPORTER_CONFIG", writeFakeMcporter(t, "Bearer FAKETOKEN"))
-	cfg := `{"sheet_file_id":"SHEET123","wecom_webhook":"` + wecomSrv.URL + `","mcp_base_url":"` + mcpTS.URL + `"}`
+	cfg := `{"sheet_file_id":"SHEET123","mcp_base_url":"` + mcpTS.URL + `"}`
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -32,15 +30,15 @@ func fullChainEnv(t *testing.T) (*fakeWecom, *recordsMCPServer) {
 "pr create") echo "https://github.com/team/repo/pull/42" ;;
 *) echo "unexpected args: $*" >&2; exit 1 ;;
 esac`)
-	return wecom, mcpSrv
+	return mcpSrv
 }
 
 var prOpenArgs = []string{"pr", "open",
 	"--title", "feat: login", "--body", "does login",
 	"--reviewer", "lisi", "--table", "s1", "--key", "登录需求"}
 
-func TestPrOpenDryRunEmitsThreeActionsNoSideEffects(t *testing.T) {
-	wecom, mcpSrv := fullChainEnv(t)
+func TestPrOpenDryRunEmitsTwoActionsNoSideEffects(t *testing.T) {
+	mcpSrv := fullChainEnv(t)
 	var stdout, stderr bytes.Buffer
 
 	code := Run(append(prOpenArgs, "--dry-run"), &stdout, &stderr)
@@ -49,8 +47,8 @@ func TestPrOpenDryRunEmitsThreeActionsNoSideEffects(t *testing.T) {
 		t.Fatalf("exit = %d, stderr: %s", code, stderr.String())
 	}
 	lines := strings.Split(strings.TrimSpace(stdout.String()), "\n")
-	if len(lines) != 3 {
-		t.Fatalf("dry-run must print exactly 3 action lines, got %d: %s", len(lines), stdout.String())
+	if len(lines) != 2 {
+		t.Fatalf("dry-run must print exactly 2 action lines, got %d: %s", len(lines), stdout.String())
 	}
 	var ops []string
 	for _, line := range lines {
@@ -60,17 +58,17 @@ func TestPrOpenDryRunEmitsThreeActionsNoSideEffects(t *testing.T) {
 		}
 		ops = append(ops, a.Service+"."+a.Op)
 	}
-	want := "gh.create_pr sheet.upsert_row wecom.nudge"
+	want := "gh.create_pr sheet.upsert_row"
 	if strings.Join(ops, " ") != want {
 		t.Fatalf("ops = %v, want %s", ops, want)
 	}
-	if len(wecom.bodies) != 0 || len(mcpSrv.added)+len(mcpSrv.updated) != 0 {
+	if len(mcpSrv.added)+len(mcpSrv.updated) != 0 {
 		t.Fatalf("dry-run must have zero side effects")
 	}
 }
 
-func TestPrOpenFullChainRunsAllThree(t *testing.T) {
-	wecom, mcpSrv := fullChainEnv(t)
+func TestPrOpenFullChainCreatesAndWritesBack(t *testing.T) {
+	mcpSrv := fullChainEnv(t)
 	var stdout, stderr bytes.Buffer
 
 	code := Run(prOpenArgs, &stdout, &stderr)
@@ -87,10 +85,7 @@ func TestPrOpenFullChainRunsAllThree(t *testing.T) {
 			t.Fatalf("sheet update missing %s in %s", want, sheetBody)
 		}
 	}
-	if len(wecom.bodies) != 1 {
-		t.Fatalf("wecom called %d times, want exactly 1", len(wecom.bodies))
-	}
-	if !strings.Contains(wecom.bodies[0], "lisi") || !strings.Contains(wecom.bodies[0], "pull/42") {
-		t.Fatalf("wecom body must mention lisi with the real PR url, got: %s", wecom.bodies[0])
+	if !strings.Contains(stdout.String(), "pull/42") {
+		t.Fatalf("stdout must echo the created PR url, got: %s", stdout.String())
 	}
 }

@@ -14,7 +14,8 @@ git pull            # 升级；软链使 skills 即时生效，重跑 install.sh
 
 ## fbh CLI
 
-skills 触碰外部服务（腾讯智能表格 / 企微 webhook / GitHub）的唯一通道。
+skills 触碰外部服务（腾讯智能表格 / GitHub）的唯一通道；通知由表格
+自动化发出，fbh 只写表。
 任何子命令加 `--dry-run` 输出将执行的动作 JSON 行而不产生副作用：
 
 ```bash

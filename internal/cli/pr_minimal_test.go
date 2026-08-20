@@ -11,29 +11,25 @@ import (
 	"github.com/kyonRay/fisco-bcos-harness/internal/action"
 )
 
-// minimalEnv: wecom + gh only — no sheet_file_id, no MCP server at all.
-// This is the "只治 review" adoption mode.
-func minimalEnv(t *testing.T) *fakeWecom {
+// noSheetEnv: gh only — no sheet config at all. pr open degrades to a
+// bare PR creation (the ledger tier is the intended entry tier).
+func noSheetEnv(t *testing.T) {
 	t.Helper()
-	wecom := &fakeWecom{}
-	srv := wecom.start(t)
-	t.Cleanup(srv.Close)
 	cfgPath := filepath.Join(t.TempDir(), "config.json")
 	t.Setenv("FBH_CONFIG", cfgPath)
-	if err := os.WriteFile(cfgPath, []byte(`{"wecom_webhook":"`+srv.URL+`"}`), 0o600); err != nil {
+	if err := os.WriteFile(cfgPath, []byte(`{}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	writeGhStub(t, `case "$1 $2" in
 "pr create") echo "https://github.com/team/repo/pull/7" ;;
 *) echo "unexpected args: $*" >&2; exit 1 ;;
 esac`)
-	return wecom
 }
 
 var minimalPrArgs = []string{"pr", "open", "--title", "feat: x", "--reviewer", "lisi"}
 
-func TestPrOpenWithoutSheetConfigRunsTwoStepChain(t *testing.T) {
-	wecom := minimalEnv(t)
+func TestPrOpenWithoutSheetConfigJustCreatesPR(t *testing.T) {
+	noSheetEnv(t)
 	var stdout, stderr bytes.Buffer
 
 	code := Run(minimalPrArgs, &stdout, &stderr)
@@ -41,16 +37,13 @@ func TestPrOpenWithoutSheetConfigRunsTwoStepChain(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit = %d, stderr: %s", code, stderr.String())
 	}
-	if len(wecom.bodies) != 1 || !strings.Contains(wecom.bodies[0], "pull/7") {
-		t.Fatalf("wecom must be nudged with the PR url, bodies: %v", wecom.bodies)
-	}
 	if !strings.Contains(stdout.String(), "pull/7") {
 		t.Fatalf("stdout must echo the created PR url, got: %s", stdout.String())
 	}
 }
 
-func TestPrOpenWithoutSheetDryRunEmitsTwoActions(t *testing.T) {
-	wecom := minimalEnv(t)
+func TestPrOpenWithoutSheetDryRunEmitsOneAction(t *testing.T) {
+	noSheetEnv(t)
 	var stdout, stderr bytes.Buffer
 
 	code := Run(append(minimalPrArgs, "--dry-run"), &stdout, &stderr)
@@ -69,16 +62,13 @@ func TestPrOpenWithoutSheetDryRunEmitsTwoActions(t *testing.T) {
 		}
 		ops = append(ops, a.Service+"."+a.Op)
 	}
-	if strings.Join(ops, " ") != "gh.create_pr wecom.nudge" {
-		t.Fatalf("ops = %v, want [gh.create_pr wecom.nudge] (no sheet action)", ops)
-	}
-	if len(wecom.bodies) != 0 {
-		t.Fatalf("dry-run must not send")
+	if strings.Join(ops, " ") != "gh.create_pr" {
+		t.Fatalf("ops = %v, want [gh.create_pr] (no sheet action)", ops)
 	}
 }
 
 func TestPrOpenTableWithoutSheetConfigErrorsToSetup(t *testing.T) {
-	minimalEnv(t)
+	noSheetEnv(t)
 	var stdout, stderr bytes.Buffer
 
 	code := Run(append(minimalPrArgs, "--table", "s1", "--key", "需求"), &stdout, &stderr)

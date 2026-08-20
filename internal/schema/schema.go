@@ -23,6 +23,9 @@ const (
 )
 
 // PR-ledger sheet column titles (PR 台账模式: rows keyed by PR URL).
+// ColPRPending drives the sheet's own automation (修改后提醒负责人): fbh
+// keeps it equal to the reviewers who have not approved yet, and the
+// sheet — not fbh — sends the notification when the row changes.
 const (
 	ColPRURL       = "PR链接"
 	ColPRTitle     = "标题"
@@ -30,6 +33,7 @@ const (
 	ColPRReviewers = "reviewers"
 	ColPRApproved  = "已approve"
 	ColPRStatus    = "状态"
+	ColPRPending   = "待处理人"
 	ColPRUpdated   = "更新时间"
 )
 

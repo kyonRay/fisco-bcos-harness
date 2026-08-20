@@ -48,7 +48,7 @@ func reviewFixtures() (requested, reviewed string) {
 }
 
 func TestStandupShowsBothSectionsWithLoopStates(t *testing.T) {
-	nudgeEnv(t)
+	ghEnv(t)
 	requested, reviewed := reviewFixtures()
 	standupStub(t, "["+stalePR(30)+"]", requested, reviewed)
 	var stdout, stderr bytes.Buffer
@@ -72,7 +72,7 @@ func TestStandupShowsBothSectionsWithLoopStates(t *testing.T) {
 }
 
 func TestStandupEmptySaysNoDebt(t *testing.T) {
-	nudgeEnv(t)
+	ghEnv(t)
 	standupStub(t, "[]", "[]", "[]")
 	var stdout, stderr bytes.Buffer
 
@@ -81,28 +81,5 @@ func TestStandupEmptySaysNoDebt(t *testing.T) {
 	}
 	if !strings.Contains(stdout.String(), "无欠账") {
 		t.Fatalf("empty standup must say 无欠账, got: %s", stdout.String())
-	}
-}
-
-func TestStandupShowsNudgeCount(t *testing.T) {
-	wecom := nudgeEnv(t)
-	requested, reviewed := reviewFixtures()
-	standupStub(t, "["+stalePR(30)+"]", requested, reviewed)
-
-	// One real nudge first so the count is 1.
-	var buf bytes.Buffer
-	if code := Run([]string{"nudge", "run"}, &buf, &buf); code != 0 {
-		t.Fatalf("nudge exit != 0: %s", buf.String())
-	}
-	if len(wecom.bodies) != 1 {
-		t.Fatalf("expected 1 nudge sent, got %d", len(wecom.bodies))
-	}
-
-	var stdout, stderr bytes.Buffer
-	if code := Run([]string{"standup"}, &stdout, &stderr); code != 0 {
-		t.Fatalf("standup exit = %d, stderr: %s", code, stderr.String())
-	}
-	if !strings.Contains(stdout.String(), "催过 1 次") {
-		t.Fatalf("standup must show nudge count, got:\n%s", stdout.String())
 	}
 }

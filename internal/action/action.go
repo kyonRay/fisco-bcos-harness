@@ -6,7 +6,7 @@ package action
 
 // Action describes one external side effect fbh is about to perform.
 type Action struct {
-	Service string         `json:"service"` // "sheet" | "wecom" | "gh"
+	Service string         `json:"service"` // "sheet" | "gh"
 	Op      string         `json:"op"`
 	Payload map[string]any `json:"payload,omitempty"`
 }

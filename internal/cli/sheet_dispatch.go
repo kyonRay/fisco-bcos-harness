@@ -310,8 +310,6 @@ func routeAction(c *Context, a action.Action) error {
 	switch a.Service {
 	case "sheet":
 		return sheetDispatch(c, a)
-	case "wecom":
-		return wecomDispatch(c, a)
 	default:
 		return fmt.Errorf("no dispatcher for service %q", a.Service)
 	}

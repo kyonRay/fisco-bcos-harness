@@ -29,10 +29,6 @@ func standupExec(c *Context) error {
 	if err != nil {
 		return err
 	}
-	nudges, err := loadNudgeState()
-	if err != nil {
-		return err
-	}
 
 	pending := 0
 	fmt.Fprintln(c.Stdout, "## 我的待 review PR")
@@ -41,11 +37,7 @@ func standupExec(c *Context) error {
 			continue
 		}
 		pending++
-		line := fmt.Sprintf("- %s  %s  挂了 %s", pr.URL, pr.NormalizedDecision(), sinceHuman(pr.UpdatedAt))
-		if n := nudges[pr.URL].Count; n > 0 {
-			line += fmt.Sprintf("  催过 %d 次", n)
-		}
-		fmt.Fprintln(c.Stdout, line)
+		fmt.Fprintf(c.Stdout, "- %s  %s  挂了 %s\n", pr.URL, pr.NormalizedDecision(), sinceHuman(pr.UpdatedAt))
 	}
 
 	owed := 0

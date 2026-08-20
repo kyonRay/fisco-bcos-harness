@@ -22,11 +22,8 @@ const milestoneRecords = `{"total":2,"records":[
   {"field":"需求名","text_value":{"items":[{"type":"text","text":"支付需求"}]}},
   {"field":"milestone","text_value":{"items":[{"type":"text","text":"M2"}]}}]}]}`
 
-func gateEnv(t *testing.T, gateCmd string) (*fakeWecom, *recordsMCPServer) {
+func gateEnv(t *testing.T, gateCmd string) *recordsMCPServer {
 	t.Helper()
-	wecom := &fakeWecom{}
-	wecomSrv := wecom.start(t)
-	t.Cleanup(wecomSrv.Close)
 	mcpSrv := &recordsMCPServer{existing: milestoneRecords}
 	mcpTS := mcpSrv.start(t)
 	t.Cleanup(mcpTS.Close)
@@ -36,21 +33,20 @@ func gateEnv(t *testing.T, gateCmd string) (*fakeWecom, *recordsMCPServer) {
 	t.Setenv("FBH_MCPORTER_CONFIG", writeFakeMcporter(t, "Bearer FAKETOKEN"))
 	cfgJSON, _ := json.Marshal(map[string]string{
 		"sheet_file_id": "SHEET123",
-		"wecom_webhook": wecomSrv.URL,
 		"mcp_base_url":  mcpTS.URL,
 		"gate_cmd":      gateCmd,
 	})
 	if err := os.WriteFile(cfgPath, cfgJSON, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	return wecom, mcpSrv
+	return mcpSrv
 }
 
 var gateArgs = []string{"gate", "run", "--milestone", "M1",
 	"--milestone-table", "ms", "--reqs-table", "s1", "--owner", "wangwu"}
 
 func TestGateSuccessDryRunEmitsWriteBackSequence(t *testing.T) {
-	wecom, mcpSrv := gateEnv(t, "exit 0")
+	mcpSrv := gateEnv(t, "exit 0")
 	var stdout, stderr bytes.Buffer
 
 	code := Run(append(gateArgs, "--dry-run"), &stdout, &stderr)
@@ -73,13 +69,13 @@ func TestGateSuccessDryRunEmitsWriteBackSequence(t *testing.T) {
 	if strings.Join(ops, " ") != want {
 		t.Fatalf("ops = %v, want %s", ops, want)
 	}
-	if len(wecom.bodies) != 0 || len(mcpSrv.added)+len(mcpSrv.updated) != 0 {
+	if len(mcpSrv.added)+len(mcpSrv.updated) != 0 {
 		t.Fatalf("dry-run must have zero side effects")
 	}
 }
 
 func TestGateSuccessWritesBackAndCompletesOnlyThisMilestone(t *testing.T) {
-	_, mcpSrv := gateEnv(t, "exit 0")
+	mcpSrv := gateEnv(t, "exit 0")
 	var stdout, stderr bytes.Buffer
 
 	code := Run(gateArgs, &stdout, &stderr)
@@ -100,8 +96,8 @@ func TestGateSuccessWritesBackAndCompletesOnlyThisMilestone(t *testing.T) {
 	}
 }
 
-func TestGateFailureCreatesDefectRowAndNudgesFallbackOwner(t *testing.T) {
-	wecom, mcpSrv := gateEnv(t, "echo consensus stall detected; exit 1")
+func TestGateFailureCreatesDefectRowOwnedByFallbackOwner(t *testing.T) {
+	mcpSrv := gateEnv(t, "echo consensus stall detected; exit 1")
 	var stdout, stderr bytes.Buffer
 
 	code := Run(gateArgs, &stdout, &stderr)
@@ -110,7 +106,8 @@ func TestGateFailureCreatesDefectRowAndNudgesFallbackOwner(t *testing.T) {
 		t.Fatalf("gate failure must exit 1, got %d; stderr: %s", code, stderr.String())
 	}
 	addBody, _ := json.Marshal(mcpSrv.added)
-	for _, want := range []string{"gate-defect", "待认领", "M1", "consensus stall detected"} {
+	// 认领人=wangwu is what routes the sheet's add-record reminder.
+	for _, want := range []string{"gate-defect", "待认领", "M1", "consensus stall detected", "wangwu"} {
 		if !strings.Contains(string(addBody), want) {
 			t.Fatalf("defect row missing %q, added: %s", want, addBody)
 		}
@@ -122,13 +119,10 @@ func TestGateFailureCreatesDefectRowAndNudgesFallbackOwner(t *testing.T) {
 	if len(mcpSrv.updated) != 0 {
 		t.Fatalf("failure path must not update existing rows, updated: %d", len(mcpSrv.updated))
 	}
-	if len(wecom.bodies) != 1 || !strings.Contains(wecom.bodies[0], "wangwu") {
-		t.Fatalf("failure must nudge fallback owner wangwu once, bodies: %v", wecom.bodies)
-	}
 }
 
-func TestGateFailureNudgesExplicitAssignee(t *testing.T) {
-	wecom, _ := gateEnv(t, "exit 1")
+func TestGateFailureAttributesExplicitAssignee(t *testing.T) {
+	mcpSrv := gateEnv(t, "exit 1")
 	var stdout, stderr bytes.Buffer
 
 	code := Run(append(gateArgs, "--assignee", "zhaoliu"), &stdout, &stderr)
@@ -136,13 +130,14 @@ func TestGateFailureNudgesExplicitAssignee(t *testing.T) {
 	if code != 1 {
 		t.Fatalf("exit = %d, want 1", code)
 	}
-	if len(wecom.bodies) != 1 || !strings.Contains(wecom.bodies[0], "zhaoliu") {
-		t.Fatalf("must nudge attributed author zhaoliu, bodies: %v", wecom.bodies)
+	addBody, _ := json.Marshal(mcpSrv.added)
+	if !strings.Contains(string(addBody), "zhaoliu") {
+		t.Fatalf("defect row must be attributed to zhaoliu, added: %s", addBody)
 	}
 }
 
 func TestGateWithoutGateCmdPointsToConfig(t *testing.T) {
-	gateEnv(t, "")
+	_ = gateEnv(t, "")
 	var stdout, stderr bytes.Buffer
 
 	code := Run(gateArgs, &stdout, &stderr)

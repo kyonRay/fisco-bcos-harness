@@ -9,7 +9,7 @@ import (
 	"github.com/kyonRay/fisco-bcos-harness/internal/action"
 )
 
-// fakeCmd registers a subcommand that emits one wecom action and counts
+// fakeCmd registers a subcommand that emits one action and counts
 // real dispatches, returning the counter.
 func registerFakeCmd(t *testing.T, name string) *int {
 	t.Helper()
@@ -19,7 +19,7 @@ func registerFakeCmd(t *testing.T, name string) *int {
 		Summary: "test-only fake command",
 		Exec: func(c *Context) error {
 			return c.Do(action.Action{
-				Service: "wecom",
+				Service: "fake",
 				Op:      "nudge",
 				Payload: map[string]any{"pr": "https://example.com/pr/42"},
 			})
@@ -49,8 +49,8 @@ func TestDryRunPrintsActionJSONWithoutDispatching(t *testing.T) {
 	if err := json.Unmarshal([]byte(line), &got); err != nil {
 		t.Fatalf("stdout is not one action JSON line: %q: %v", line, err)
 	}
-	if got.Service != "wecom" || got.Op != "nudge" {
-		t.Fatalf("action = %+v, want service=wecom op=nudge", got)
+	if got.Service != "fake" || got.Op != "nudge" {
+		t.Fatalf("action = %+v, want service=fake op=nudge", got)
 	}
 	if got.Payload["pr"] != "https://example.com/pr/42" {
 		t.Fatalf("payload = %v, want pr link preserved", got.Payload)
