@@ -52,7 +52,8 @@ func fakeMCPServer(t *testing.T, wantToken string) *httptest.Server {
 			if req.Params.Arguments["file_id"] != "SHEET123" {
 				t.Errorf("file_id = %v, want SHEET123", req.Params.Arguments["file_id"])
 			}
-			text := `{"sheets":[{"sheet_id":"s1","name":"需求表"},{"sheet_id":"s2","name":"milestone表"}]}`
+			// "title" is what the production API returns (live-verified).
+			text := `{"sheets":[{"sheet_id":"s1","title":"需求表"},{"sheet_id":"s2","title":"milestone表"}]}`
 			resp := map[string]any{
 				"jsonrpc": "2.0", "id": req.ID,
 				"result": map[string]any{

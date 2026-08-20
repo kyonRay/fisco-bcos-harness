@@ -254,15 +254,22 @@ func dispatchClaim(c *Context, client *mcp.Client, a action.Action) error {
 // falling back to the raw tool text.
 func renderSheetResult(c *Context, op, text string) error {
 	if op == "list_tables" {
+		// The production API names the field "title" (verified live
+		// 2026-08-20); older fixtures used "name" — accept both.
 		var parsed struct {
 			Sheets []struct {
 				SheetID string `json:"sheet_id"`
+				Title   string `json:"title"`
 				Name    string `json:"name"`
 			} `json:"sheets"`
 		}
 		if err := json.Unmarshal([]byte(text), &parsed); err == nil && len(parsed.Sheets) > 0 {
 			for _, s := range parsed.Sheets {
-				fmt.Fprintf(c.Stdout, "%s\t%s\n", s.SheetID, s.Name)
+				title := s.Title
+				if title == "" {
+					title = s.Name
+				}
+				fmt.Fprintf(c.Stdout, "%s\t%s\n", s.SheetID, title)
 			}
 			return nil
 		}
