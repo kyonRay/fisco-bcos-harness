@@ -14,7 +14,7 @@ import (
 func init() {
 	Register(Command{
 		Name:     "pr",
-		Summary:  "open a PR and register it in the ledger; sheet automation sends the notifications",
+		Summary:  "open a PR, register it in the ledger, and draft the WeCom group broadcast",
 		Exec:     prExec,
 		Dispatch: prDispatch,
 	})
@@ -82,9 +82,7 @@ func prOpen(c *Context, args []string) error {
 	prURL := c.LastResult
 
 	// 2a. Register the PR in the PR ledger (PR 台账模式): rows keyed by
-	// PR URL, so the whole team's AIs can see what awaits review. The
-	// row add itself is the notification: the sheet's 添加记录提醒到群
-	// automation announces it — fbh sends nothing directly.
+	// PR URL, so the whole team's AIs can see what awaits review.
 	if cfg.PRSheetID != "" {
 		author, err := gh.Login()
 		if err != nil {
@@ -115,7 +113,31 @@ func prOpen(c *Context, args []string) error {
 			return err
 		}
 	}
+
+	broadcast(c, cfg,
+		"【新 PR 请 review】"+flags["title"],
+		prURL,
+		"reviewers: "+flags["reviewer"])
 	return nil
+}
+
+// broadcast prints a copy-paste-ready WeCom group message. The team's
+// WeCom blocks bots and outside sheet automations, so the author is the
+// delivery channel: fbh drafts the text, the human pastes it (半自动播报).
+func broadcast(c *Context, cfg config.Config, lines ...string) {
+	if c.dryRun {
+		return // dry-run output stays pure action JSON lines
+	}
+	fmt.Fprintln(c.Stdout, "---- 复制到企微群 ----")
+	for _, l := range lines {
+		fmt.Fprintln(c.Stdout, l)
+	}
+	if cfg.SheetFileID != "" {
+		// sheet_file_id is the URL tail segment (see usage.md), so the
+		// ledger link can be rebuilt from it.
+		fmt.Fprintf(c.Stdout, "台账：https://docs.qq.com/smartsheet/%s\n", cfg.SheetFileID)
+	}
+	fmt.Fprintln(c.Stdout, "----------------------")
 }
 
 // prDispatch routes the chain's actions to the owning dispatcher.
@@ -160,8 +182,8 @@ func prLedgerStatus(pr gh.PR) string {
 }
 
 // prSync refreshes one PR's ledger row from GitHub. 待处理人 becomes
-// the reviewers who have not approved yet; the sheet's 修改后提醒负责人
-// automation notifies them off that column — fbh sends nothing itself.
+// the reviewers who have not approved yet; they are named in the
+// broadcast draft the author pastes into the WeCom group.
 func prSync(c *Context, args []string) error {
 	flags, _, err := parseFlags(args)
 	if err != nil {
@@ -199,6 +221,17 @@ func prSync(c *Context, args []string) error {
 		return err
 	}
 	fmt.Fprintf(c.Stdout, "synced %s -> %s (待处理人: %s)\n", pr.URL, status, strings.Join(pending, ","))
+
+	if len(pending) > 0 {
+		head := "【PR 待 review】"
+		if status == "待复审" {
+			head = "【已按意见修复，请继续 review】"
+		}
+		broadcast(c, cfg,
+			head+pr.Title,
+			pr.URL,
+			"还差 approve: "+strings.Join(pending, ","))
+	}
 	return nil
 }
 

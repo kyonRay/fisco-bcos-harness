@@ -1,13 +1,13 @@
 ---
 name: fbh-gate
-description: milestone 门禁：在负责人本机跑完整集成测试+SIT（包装 fisco-bcos-release-gate），通过则回写表格勾选完成，失败则自动建缺陷行（表格自动化随即提醒归因作者）。milestone 到点验收、发版前验证时使用。
+description: milestone 门禁：在负责人本机跑完整集成测试+SIT（包装 fisco-bcos-release-gate），通过则回写表格勾选完成，失败则自动建缺陷行（认领人=归因作者，负责人转达群里）。milestone 到点验收、发版前验证时使用。
 ---
 
 # /fbh-gate — milestone 门禁
 
 只有 milestone 负责人跑（ADR-0004）。门禁命令本体是 fisco-bcos-release-gate
-（或团队配置的其它命令），fbh 只包装：执行 → 按结果回写表格；通知由表格的
-添加记录提醒自动化发出。
+（或团队配置的其它命令），fbh 只包装：执行 → 按结果回写表格；结果由
+负责人在企微群转达（可直接引用 fbh 的输出）。
 
 ## 前置（一次性）
 
@@ -31,7 +31,7 @@ fbh config set gate_cmd '<release-gate 的完整调用命令>'
    - **通过**：milestone 行已记 门禁状态=通过+时间，该 milestone 全部子需求
      状态=完成。向用户报喜并复述勾选结果。
    - **失败**：exit 1，表格已自动建缺陷行（gate-defect-<M>-<时间>，状态待认领，
-     认领人=归因对象，备注含失败尾部输出）；表格自动化会提醒到人。
+     认领人=归因对象，备注含失败尾部输出）；提醒负责人把结果转达群里。
 
 ## 归因（失败时，AI 的职责）
 

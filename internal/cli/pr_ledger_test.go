@@ -82,10 +82,16 @@ esac`)
 			t.Fatalf("ledger row missing %q in %s", want, body)
 		}
 	}
-	// 待处理人 drives the sheet's directed-reminder automation: it must
-	// start as the full reviewer list.
+	// 待处理人 must start as the full reviewer list.
 	if got, ok := capturedField(t, mcpSrv.added[0], "待处理人"); !ok || got != "lisi,wangwu" {
 		t.Fatalf("待处理人 = %q (found=%v), want lisi,wangwu", got, ok)
+	}
+	// The paste-ready group broadcast names the PR and its reviewers.
+	out := stdout.String()
+	for _, want := range []string{"复制到企微群", "pull/9", "lisi,wangwu", "smartsheet/SHEET123"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("broadcast missing %q, got:\n%s", want, out)
+		}
 	}
 }
 
@@ -122,10 +128,21 @@ func TestPrSyncFixedPRBecomesPendingRereviewWithOnlyUnapprovedPending(t *testing
 	if got, _ := capturedField(t, mcpSrv.added[0], "已approve"); got != "wangwu" {
 		t.Fatalf("已approve = %q, want wangwu", got)
 	}
-	// Only the un-approved lisi stays pending — the sheet automation
-	// reminds off this column, so wangwu must NOT reappear here.
+	// Only the un-approved lisi stays pending; wangwu must NOT
+	// reappear here.
 	if got, _ := capturedField(t, mcpSrv.added[0], "待处理人"); got != "lisi" {
 		t.Fatalf("待处理人 = %q, want lisi", got)
+	}
+	// Broadcast asks only lisi to continue; the approved wangwu is not
+	// on the 还差 line.
+	out := stdout.String()
+	for _, want := range []string{"复制到企微群", "请继续 review", "还差 approve: lisi"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("broadcast missing %q, got:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "还差 approve: lisi,wangwu") || strings.Contains(out, "wangwu,lisi") {
+		t.Fatalf("approved wangwu must not be asked again, got:\n%s", out)
 	}
 }
 
@@ -148,6 +165,9 @@ func TestPrSyncApprovedPRClearsPending(t *testing.T) {
 	}
 	if got, ok := capturedField(t, mcpSrv.added[0], "待处理人"); !ok || got != "" {
 		t.Fatalf("待处理人 = %q (found=%v), want cleared — nobody left to remind", got, ok)
+	}
+	if strings.Contains(stdout.String(), "复制到企微群") {
+		t.Fatalf("approved PR must not draft a broadcast, got:\n%s", stdout.String())
 	}
 }
 

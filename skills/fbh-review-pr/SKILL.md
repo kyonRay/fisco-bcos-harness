@@ -30,7 +30,7 @@ description: reviewer 侧 AI review 循环：对被指派的 PR 做完整 review
 gh pr review <PR> --request-changes --body "<分级意见全文>"
 ```
 
-然后（仅需求表已配置时，看 `fbh config show`）跑 `fbh sheet set-status --table <需求表> --key "<需求名>" --status review循环`（首轮时）。作者改完会跑 `fbh pr sync`，表格自动化提醒你复审。
+然后（仅需求表已配置时，看 `fbh config show`）跑 `fbh sheet set-status --table <需求表> --key "<需求名>" --status review循环`（首轮时）。作者改完会跑 `fbh pr sync` 并在群里播报，等群消息提醒你复审。
 
 **无 must-fix** → 发预读简报，进入人工阶段：
 

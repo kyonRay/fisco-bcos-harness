@@ -81,9 +81,8 @@ func gateExec(c *Context) error {
 	}
 
 	// Fail: file a defect row attributed to the author (the /fbh-gate
-	// skill does the semantic attribution; fallback = owner). The row
-	// add is the notification — the sheet's 添加记录提醒 automation
-	// announces it; fbh sends nothing directly.
+	// skill does the semantic attribution; fallback = owner). The
+	// milestone owner relays the result to the group by hand.
 	assignee := flags["assignee"]
 	if assignee == "" {
 		assignee = flags["owner"]
